@@ -79,9 +79,9 @@ export default function CartDrawer({
         onClick={onClose} 
       />
 
-      <div className="absolute inset-y-0 right-0 flex max-w-full pl-10" id="cart-drawer-container">
+      <div className="absolute inset-y-0 right-0 flex max-w-full" id="cart-drawer-container">
         {/* Sliding Panel */}
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-250">
+        <div className="w-screen max-w-[calc(100vw-24px)] sm:max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-250">
           
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-5 sm:px-6 border-b border-gray-100">

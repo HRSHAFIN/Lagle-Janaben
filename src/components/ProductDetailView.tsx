@@ -146,21 +146,21 @@ export default function ProductDetailView({
           )}
 
           {/* Mini Trust Bullet Highlights */}
-          <div className="grid grid-cols-3 gap-4 py-4 border-y border-gray-100">
-            <div className="flex flex-col items-center text-center p-2">
-              <Gift className="h-5 w-5 text-[#B88E4C] mb-1.5" />
-              <span className="font-sans text-[11px] font-bold text-gray-900">Elegant Wrap</span>
-              <span className="font-sans text-[9px] text-gray-400 mt-0.5">Premium curated box</span>
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 py-4 border-y border-gray-100">
+            <div className="flex flex-col items-center text-center p-1 sm:p-2">
+              <Gift className="h-4 w-4 sm:h-5 sm:w-5 text-[#B88E4C] mb-1 sm:mb-1.5" />
+              <span className="font-sans text-[10px] sm:text-[11px] font-bold text-gray-900 leading-tight">Elegant Wrap</span>
+              <span className="font-sans text-[8px] sm:text-[9px] text-gray-400 mt-0.5 leading-tight">Premium curated box</span>
             </div>
-            <div className="flex flex-col items-center text-center p-2">
-              <Truck className="h-5 w-5 text-[#B88E4C] mb-1.5" />
-              <span className="font-sans text-[11px] font-bold text-gray-900">Fast Delivery</span>
-              <span className="font-sans text-[9px] text-gray-400 mt-0.5">Nationwide inside BD</span>
+            <div className="flex flex-col items-center text-center p-1 sm:p-2">
+              <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-[#B88E4C] mb-1 sm:mb-1.5" />
+              <span className="font-sans text-[10px] sm:text-[11px] font-bold text-gray-900 leading-tight">Fast Delivery</span>
+              <span className="font-sans text-[8px] sm:text-[9px] text-gray-400 mt-0.5 leading-tight">Nationwide inside BD</span>
             </div>
-            <div className="flex flex-col items-center text-center p-2">
-              <RefreshCw className="h-5 w-5 text-[#B88E4C] mb-1.5" />
-              <span className="font-sans text-[11px] font-bold text-gray-900">Authentic Only</span>
-              <span className="font-sans text-[9px] text-gray-400 mt-0.5">100% original crafted</span>
+            <div className="flex flex-col items-center text-center p-1 sm:p-2">
+              <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5 text-[#B88E4C] mb-1 sm:mb-1.5" />
+              <span className="font-sans text-[10px] sm:text-[11px] font-bold text-gray-900 leading-tight">Authentic Only</span>
+              <span className="font-sans text-[8px] sm:text-[9px] text-gray-400 mt-0.5 leading-tight">100% original crafted</span>
             </div>
           </div>
         </div>
@@ -222,8 +222,8 @@ export default function ProductDetailView({
             </div>
 
             {/* Tabs for Structured details */}
-            <div className="mt-8 border-b border-gray-100">
-              <div className="flex space-x-6">
+            <div className="mt-8 border-b border-gray-100 overflow-x-auto scrollbar-hide">
+              <div className="flex space-x-4 sm:space-x-6 min-w-max">
                 <button
                   onClick={() => setActiveTab('details')}
                   className={`pb-3 font-sans text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
