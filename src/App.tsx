@@ -467,7 +467,6 @@ export default function App() {
                     <span className="text-[#1E2D44]">Lagle</span>{" "}
                     <span className="text-[#B88E4C]">Janaben</span>
                   </span>
-                  <span className="font-sans text-[10px] text-gray-400 font-medium leading-tight mt-0.5">Gifts that connect Hearts</span>
                 </div>
               </div>
               <p className="text-sm text-gray-500 leading-relaxed">
@@ -554,9 +553,7 @@ export default function App() {
             <div className="flex items-center space-x-4">
               <span className="hover:text-gray-600 transition-colors cursor-pointer">Privacy Policy</span>
               <span>•</span>
-              <span className="hover:text-gray-600 transition-colors cursor-pointer">Terms of Service</span>
-              <span>•</span>
-              <span className="hover:text-gray-600 transition-colors cursor-pointer" onClick={() => setCurrentView('admin')}>Admin Portal</span>
+              <span className="hover:text-gray-600 transition-colors cursor-pointer">Terms of Service</span>git 
             </div>
           </div>
         </div>
