@@ -1,0 +1,6 @@
+{
+  "name": "Lagle Janaben",
+  "description": "Lagle Janaben - Gifts that connect Hearts. A beautifully curated Bangladeshi minimalist gift and product hub with full-featured catalog, checkout, and admin analytics dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
