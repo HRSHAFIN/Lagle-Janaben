@@ -1,6 +1,28 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Safeguard against browser extensions or scripts attempting to assign to window.fetch
+      // inside sandboxed iframe environments where window.fetch might be getter-only.
+      (function() {
+        try {
+          var originalFetch = window.fetch;
+          var fetchValue = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return fetchValue;
+            },
+            set: function(val) {
+              fetchValue = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          console.warn('Could not make window.fetch writable:', e);
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lagle Janaben - Gifts that connect Hearts</title>

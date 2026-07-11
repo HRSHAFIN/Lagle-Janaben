@@ -86,7 +86,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
       {/* Catalog Hero Banner (Purely Visual Decorative Banner) */}
       <div 
         className="mb-10 rounded-2xl h-48 sm:h-64 md:h-72 w-full relative overflow-hidden bg-cover bg-center border border-gray-100 shadow-sm" 
-        style={{ backgroundImage: "url('https://savedly.net/f/sbj58rv3')" }}
+        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&w=1600&q=80')" }}
         id="hero-banner"
       />
 
@@ -395,18 +395,18 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
 
             {/* Load More or Reached End Message */}
             {isAllCategory && (
-              <div className="mt-12 flex flex-col items-center justify-center border-t border-gray-100 pt-8" id="pagination-controls">
+              <div className="mt-8 sm:mt-12 flex flex-col items-center justify-center border-t border-gray-100 pt-6 sm:pt-8 px-4" id="pagination-controls">
                 {filteredProducts.length > visibleCount ? (
                   <button
                     onClick={() => setVisibleCount((prev) => prev + 6)}
-                    className="rounded-xl border-2 border-[#1E2D44]/10 bg-white hover:bg-[#1E2D44]/5 hover:border-[#1E2D44]/30 px-8 py-3.5 font-sans text-sm font-bold text-[#1E2D44] active:scale-95 transition-all shadow-sm flex items-center gap-2"
+                    className="w-full sm:w-auto rounded-xl border-2 border-[#1E2D44]/10 bg-white hover:bg-[#1E2D44]/5 hover:border-[#1E2D44]/30 px-6 py-3 sm:px-8 sm:py-3.5 font-sans text-xs sm:text-sm font-bold text-[#1E2D44] active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2 touch-manipulation min-h-[44px]"
                     id="load-more-btn"
                   >
                     <ShoppingBag className="h-4 w-4 text-[#1E2D44]" />
                     <span>Load More Products</span>
                   </button>
                 ) : (
-                  <div className="font-sans text-sm text-gray-500 bg-gray-50 rounded-2xl px-6 py-3 border border-gray-100 text-center max-w-md shadow-sm" id="reached-end-msg">
+                  <div className="font-sans text-xs sm:text-sm text-gray-500 bg-gray-50 rounded-2xl px-5 py-3 sm:px-6 sm:py-3 border border-gray-100 text-center w-full max-w-sm sm:max-w-md shadow-sm" id="reached-end-msg">
                     ✨ You have reached the end. Do a search to keep exploring!
                   </div>
                 )}
