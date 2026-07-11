@@ -1,0 +1,26 @@
+RewriteEngine On
+
+# Redirect API routes without .php extension to the PHP files
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/sslcommerz/initiate$ api/sslcommerz/initiate.php [L,QSA]
+RewriteRule ^api/sslcommerz/success$ api/sslcommerz/success.php [L,QSA]
+RewriteRule ^api/sslcommerz/fail$ api/sslcommerz/fail.php [L,QSA]
+RewriteRule ^api/sslcommerz/cancel$ api/sslcommerz/cancel.php [L,QSA]
+
+# Order detail endpoint: /api/sslcommerz/order/ORD-1234 -> order.php?tran_id=ORD-1234
+RewriteRule ^api/sslcommerz/order/(.+)$ api/sslcommerz/order.php?tran_id=$1 [L,QSA]
+
+# CRUD endpoints
+RewriteRule ^api/products$ api/products.php [L,QSA]
+RewriteRule ^api/orders$ api/orders.php [L,QSA]
+RewriteRule ^api/customers$ api/customers.php [L,QSA]
+RewriteRule ^api/promo_codes$ api/promo_codes.php [L,QSA]
+RewriteRule ^api/shipping_settings$ api/shipping_settings.php [L,QSA]
+
+# If the requested file or directory exists, serve it directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# For SPA routing: serve index.html for all non-file, non-API requests
+RewriteRule ^(?!api/).*$ index.html [L]

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, ShoppingCart, Users, Package, Search, Plus, 
   Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2, 
-  Clock, Ship, Ban, AlertTriangle, RefreshCw
+  Clock, Ship, Ban, AlertTriangle, RefreshCw, Percent, Truck
 } from 'lucide-react';
-import { Product, Order, Customer, AdminTabType } from '../types';
+import { Product, Order, Customer, AdminTabType, PromoCode, ShippingSettings } from '../types';
 import { CATEGORIES } from '../data';
+
+const API_BASE = '/api';
 
 interface AdminDashboardProps {
   products: Product[];
@@ -16,6 +18,8 @@ interface AdminDashboardProps {
   onDeleteProduct: (productId: string) => void;
   onUpdateOrderStatus: (orderId: string, status: Order['status']) => void;
   onUpdateCustomerStatus: (customerId: string, status: Customer['status']) => void;
+  onShippingSettingsChange?: (settings: ShippingSettings) => void;
+  onPromoCodesChange?: (codes: PromoCode[]) => void;
 }
 
 export default function AdminDashboard({
@@ -27,6 +31,8 @@ export default function AdminDashboard({
   onDeleteProduct,
   onUpdateOrderStatus,
   onUpdateCustomerStatus,
+  onShippingSettingsChange,
+  onPromoCodesChange,
 }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<AdminTabType>('overview');
 
@@ -54,6 +60,70 @@ export default function AdminDashboard({
 
   // Customers tab states
   const [customerSearch, setCustomerSearch] = useState('');
+
+  // Promo codes tab states
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [showAddPromo, setShowAddPromo] = useState(false);
+  const [promoForm, setPromoForm] = useState({ code: '', type: 'percentage', value: '', usage_limit: '', min_order_amount: '' });
+
+  // Shipping settings tab
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({ shipping_fee: 10, free_shipping_threshold: 150 });
+  const [shippingSaved, setShippingSaved] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/promo_codes.php`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => Array.isArray(d) && setPromoCodes(d))
+      .catch(() => {});
+    fetch(`${API_BASE}/shipping_settings.php`)
+      .then(r => r.ok ? r.json() : null)
+      .then(s => { if (s && typeof s.shipping_fee === 'number') setShippingSettings(s); })
+      .catch(() => {});
+  }, []);
+
+  const handleAddPromoCode = () => {
+    const code = promoForm.code.trim().toUpperCase();
+    const value = parseFloat(promoForm.value);
+    if (!code || isNaN(value)) return;
+    fetch(`${API_BASE}/promo_codes.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        type: promoForm.type,
+        value,
+        usage_limit: promoForm.usage_limit ? parseInt(promoForm.usage_limit) : null,
+        min_order_amount: promoForm.min_order_amount ? parseFloat(promoForm.min_order_amount) : null,
+      }),
+    }).then(r => {
+      if (r.ok) return fetch(`${API_BASE}/promo_codes.php`).then(r => r.json());
+    }).then(updated => {
+      if (Array.isArray(updated)) {
+        setPromoCodes(updated);
+        onPromoCodesChange?.(updated);
+      }
+    }).catch(() => {});
+    setPromoForm({ code: '', type: 'percentage', value: '', usage_limit: '', min_order_amount: '' });
+    setShowAddPromo(false);
+  };
+
+  const handleDeletePromoCode = (id: number | string) => {
+    fetch(`${API_BASE}/promo_codes.php?id=${id}`, { method: 'DELETE' }).catch(() => {});
+    const updated = promoCodes.filter(p => String(p.id) !== String(id));
+    setPromoCodes(updated);
+    onPromoCodesChange?.(updated);
+  };
+
+  const handleSaveShipping = async () => {
+    await fetch(`${API_BASE}/shipping_settings.php`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(shippingSettings),
+    });
+    setShippingSaved(true);
+    if (onShippingSettingsChange) onShippingSettingsChange(shippingSettings);
+    setTimeout(() => setShippingSaved(false), 2000);
+  };
 
   // --------------------------------------------------------
   // METRICS & ANALYTICS COMPUTATION
@@ -227,9 +297,32 @@ export default function AdminDashboard({
           >
             <Users className="h-4.5 w-4.5" />
             <span>Customers</span>
-            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
-              {customers.length}
-            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('promos')}
+            className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'promos'
+                ? 'bg-gray-900 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+            id="tab-btn-promos"
+          >
+            <Percent className="h-4.5 w-4.5" />
+            <span>Promo Codes</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('shipping')}
+            className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'shipping'
+                ? 'bg-gray-900 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+            id="tab-btn-shipping"
+          >
+            <Truck className="h-4.5 w-4.5" />
+            <span>Shipping</span>
           </button>
         </nav>
 
@@ -693,6 +786,170 @@ export default function AdminDashboard({
             </div>
           )}
 
+          {/* ======================================================== */}
+          {/* TAB: PROMO CODES */}
+          {/* ======================================================== */}
+          {activeTab === 'promos' && (
+            <div className="space-y-6 animate-in fade-in duration-150 text-left" id="promos-pane">
+              <div className="flex items-center justify-between">
+                <h3 className="font-sans text-lg font-bold text-gray-900">Promo Codes</h3>
+                <button
+                  onClick={() => setShowAddPromo(true)}
+                  className="flex items-center space-x-1.5 rounded-lg bg-gray-900 px-4 py-2 font-sans text-sm font-semibold text-white hover:bg-gray-800"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Promo Code</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+                <table className="min-w-full divide-y divide-gray-100 text-sm">
+                  <thead className="bg-gray-50/75">
+                    <tr>
+                      <th className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Code</th>
+                      <th className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Type</th>
+                      <th className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Value</th>
+                      <th className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Min Order</th>
+                      <th className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Usage</th>
+                      <th className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Status</th>
+                      <th className="px-6 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {Array.isArray(promoCodes) && promoCodes.map((promo) => (
+                      <tr key={promo.id} className="hover:bg-gray-50/50">
+                        <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900">{promo.code}</td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span className={`rounded-full px-2.5 py-0.5 font-sans text-xs font-semibold ${promo.type === 'percentage' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {promo.type === 'percentage' ? '% Off' : 'Flat ৳'}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 font-mono font-semibold text-gray-900">
+                          {promo.type === 'percentage' ? `${promo.value}%` : `৳${(Number(promo.value) || 0).toFixed(2)}`}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 font-mono text-gray-600">
+                          {promo.min_order_amount ? `৳${promo.min_order_amount}` : '—'}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 font-mono text-gray-600">
+                          {promo.used_count}{promo.usage_limit ? ` / ${promo.usage_limit}` : ''}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span className={`rounded-full px-2.5 py-0.5 font-sans text-xs font-semibold ${promo.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {promo.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                          <button
+                            onClick={() => handleDeletePromoCode(promo.id)}
+                            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {showAddPromo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm" id="add-promo-modal">
+                  <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 text-left animate-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+                      <h2 className="font-sans text-lg font-bold text-gray-900">Add Promo Code</h2>
+                      <button onClick={() => setShowAddPromo(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-50">
+                        <X className="h-4.5 w-4.5" />
+                      </button>
+                    </div>
+                    <form onSubmit={(e) => { e.preventDefault(); handleAddPromoCode(); }} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Code *</label>
+                        <input type="text" required value={promoForm.code} onChange={e => setPromoForm({...promoForm, code: e.target.value.toUpperCase()})}
+                          placeholder="SUMMER25" className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none font-mono" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</label>
+                          <select value={promoForm.type} onChange={e => setPromoForm({...promoForm, type: e.target.value})}
+                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm bg-white focus:border-gray-900 focus:outline-none">
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="flat">Flat Amount (৳)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Value *</label>
+                          <input type="number" required min="0" step="0.01" value={promoForm.value}
+                            onChange={e => setPromoForm({...promoForm, value: e.target.value})}
+                            placeholder={promoForm.type === 'percentage' ? '10' : '5.00'}
+                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Min Order (optional)</label>
+                          <input type="number" min="0" step="0.01" value={promoForm.min_order_amount}
+                            onChange={e => setPromoForm({...promoForm, min_order_amount: e.target.value})}
+                            placeholder="100.00" className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Usage Limit (optional)</label>
+                          <input type="number" min="0" value={promoForm.usage_limit}
+                            onChange={e => setPromoForm({...promoForm, usage_limit: e.target.value})}
+                            placeholder="50" className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+                        </div>
+                      </div>
+                      <div className="flex space-x-3 pt-3">
+                        <button type="button" onClick={() => setShowAddPromo(false)}
+                          className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+                        <button type="submit"
+                          className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">Create</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB: SHIPPING */}
+          {/* ======================================================== */}
+          {activeTab === 'shipping' && (
+            <div className="space-y-6 animate-in fade-in duration-150 text-left" id="shipping-pane">
+              <h3 className="font-sans text-lg font-bold text-gray-900">Shipping Settings</h3>
+
+              <div className="max-w-lg rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                <div className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Standard Shipping Fee (৳)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 font-mono text-sm text-gray-400">৳</span>
+                      <input type="number" min="0" step="0.01" value={shippingSettings.shipping_fee}
+                        onChange={e => { setShippingSettings({...shippingSettings, shipping_fee: parseFloat(e.target.value) || 0}); setShippingSaved(false); }}
+                        className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-gray-900 focus:outline-none font-mono" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Free Shipping Threshold (৳)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 font-mono text-sm text-gray-400">৳</span>
+                      <input type="number" min="0" step="0.01" value={shippingSettings.free_shipping_threshold}
+                        onChange={e => { setShippingSettings({...shippingSettings, free_shipping_threshold: parseFloat(e.target.value) || 0}); setShippingSaved(false); }}
+                        className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-gray-900 focus:outline-none font-mono" />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">Orders at or above this amount get free shipping.</p>
+                  </div>
+
+                  <button onClick={handleSaveShipping}
+                    className="flex items-center space-x-2 rounded-xl bg-gray-900 px-6 py-3 font-sans text-sm font-semibold text-white hover:bg-gray-800">
+                    {shippingSaved ? <><Check className="h-4 w-4" /><span>Saved!</span></> : <span>Save Settings</span>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1137,7 +1394,7 @@ export default function AdminDashboard({
                   <div className="flex justify-between text-gray-500">
                     <span>Shipping fee</span>
                     <span className="font-mono">
-                      {selectedOrderDetail.subtotal >= 150 ? 'Free' : '৳10.00'}
+                      {selectedOrderDetail.subtotal >= shippingSettings.free_shipping_threshold ? 'Free' : `৳${shippingSettings.shipping_fee.toFixed(2)}`}
                     </span>
                   </div>
                   <div className="border-t border-gray-200 my-2" />

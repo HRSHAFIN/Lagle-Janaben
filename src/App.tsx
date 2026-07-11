@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Product, Order, Customer, CartItem, ViewType } from './types';
+import { Product, Order, Customer, CartItem, ViewType, PromoCode, ShippingSettings } from './types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_ORDERS } from './data';
 import Navbar from './components/Navbar';
 import CatalogView from './components/CatalogView';
@@ -10,9 +10,11 @@ import ProductDetailView from './components/ProductDetailView';
 import Logo from './components/Logo';
 import { Mail, Phone, MapPin, Heart, ShieldCheck } from 'lucide-react';
 
+const API_BASE = '/api';
+
 export default function App() {
   // --------------------------------------------------------
-  // CENTRAL PERSISTENCE (LOCALSTORAGE BACKED STATE)
+  // CENTRAL PERSISTENCE (PHP API BACKED STATE)
   // --------------------------------------------------------
   const [products, setProducts] = useState<Product[]>(() => {
     const local = localStorage.getItem('aura_products');
@@ -39,6 +41,29 @@ export default function App() {
   const [appliedPromo, setAppliedPromo] = useState('');
   const [sslCompletedOrder, setSslCompletedOrder] = useState<Order | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({ shipping_fee: 10, free_shipping_threshold: 150 });
+
+  // --------------------------------------------------------
+  // FETCH INITIAL DATA FROM PHP API
+  // --------------------------------------------------------
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API_BASE}/products.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
+      fetch(`${API_BASE}/orders.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
+      fetch(`${API_BASE}/customers.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
+      fetch(`${API_BASE}/promo_codes.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
+      fetch(`${API_BASE}/shipping_settings.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
+    ])
+      .then(([apiProducts, apiOrders, apiCustomers, apiPromos, apiShipping]) => {
+        if (apiProducts) setProducts(apiProducts);
+        if (apiOrders) setOrders(apiOrders);
+        if (apiCustomers) setCustomers(apiCustomers);
+        if (apiPromos) setPromoCodes(apiPromos);
+        if (apiShipping) setShippingSettings(apiShipping);
+      })
+      .catch(err => console.warn('Could not fetch from PHP API, using local data:', err));
+  }, []);
 
   // SSLCommerz payment callback detection & local state synchronization
   useEffect(() => {
@@ -49,7 +74,7 @@ export default function App() {
     if (sslStatus === 'success' && tranId) {
       console.log(`Successful SSLCommerz transaction detected: ${tranId}. Synchronizing state...`);
       
-      fetch(`/api/sslcommerz/order/${tranId}`)
+      fetch(`${API_BASE}/sslcommerz/order.php?tran_id=${tranId}`)
         .then((res) => {
           if (!res.ok) throw new Error('Order details not found on server');
           return res.json();
@@ -262,14 +287,22 @@ export default function App() {
   }): Order => {
     const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
     
-    // Compute discount
+    // Compute discount from applied promo
     let discount = 0;
-    if (appliedPromo === 'WELCOME10') discount = subtotal * 0.10;
-    else if (appliedPromo === 'AURA20') discount = subtotal * 0.20;
-    else if (appliedPromo === 'FREESHIP') discount = 5.00;
+    if (appliedPromo) {
+      const promo = promoCodes.find(p => p.code === appliedPromo && p.is_active);
+      if (promo) {
+        if (promo.type === 'percentage') {
+          discount = subtotal * (promo.value / 100);
+        } else {
+          discount = promo.value;
+        }
+      }
+    }
 
-    const isFreeShipping = subtotal >= 150;
-    const shippingFee = isFreeShipping ? 0 : 10;
+    const { free_shipping_threshold, shipping_fee } = shippingSettings;
+    const isFreeShipping = subtotal >= free_shipping_threshold;
+    const shippingFee = isFreeShipping ? 0 : shipping_fee;
     const total = subtotal - discount + shippingFee;
 
     // 1. Create a beautiful random Order ID
@@ -345,7 +378,23 @@ export default function App() {
     // 4. Save order to main orders feed
     setOrders((prevOrders) => [newOrder, ...prevOrders]);
 
-    // 5. Purge shopping cart and promo code
+    // 5. Persist order to PHP API
+    fetch(`${API_BASE}/orders.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...newOrder,
+        items: newOrder.items.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.image,
+        })),
+      }),
+    }).catch(err => console.warn('Failed to persist order to API:', err));
+
+    // 6. Purge shopping cart and promo code
     setCart([]);
     setAppliedPromo('');
 
@@ -362,26 +411,49 @@ export default function App() {
       id: nextId,
     };
     setProducts([...products, product]);
+    fetch(`${API_BASE}/products.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product),
+    }).catch(err => console.warn('Failed to sync product to API:', err));
   };
 
   const handleUpdateProduct = (updatedProd: Product) => {
     setProducts(products.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
+    fetch(`${API_BASE}/products.php`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedProd),
+    }).catch(err => console.warn('Failed to sync product update to API:', err));
   };
 
   const handleDeleteProduct = (productId: string) => {
     setProducts(products.filter((p) => p.id !== productId));
+    fetch(`${API_BASE}/products.php?id=${productId}`, {
+      method: 'DELETE',
+    }).catch(err => console.warn('Failed to sync product delete to API:', err));
   };
 
   const handleUpdateOrderStatus = (orderId: string, status: Order['status']) => {
     setOrders(
       orders.map((o) => (o.id === orderId ? { ...o, status } : o))
     );
+    fetch(`${API_BASE}/orders.php`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: orderId, status }),
+    }).catch(err => console.warn('Failed to sync order status to API:', err));
   };
 
   const handleUpdateCustomerStatus = (customerId: string, status: Customer['status']) => {
     setCustomers(
       customers.map((c) => (c.id === customerId ? { ...c, status } : c))
     );
+    fetch(`${API_BASE}/customers.php`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: customerId, status }),
+    }).catch(err => console.warn('Failed to sync customer status to API:', err));
   };
 
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -431,6 +503,8 @@ export default function App() {
           <CheckoutView
             cart={cart}
             appliedPromo={appliedPromo}
+            promoCodes={promoCodes}
+            shippingSettings={shippingSettings}
             onPlaceOrder={handlePlaceOrder}
             onBackToCatalog={() => setCurrentView('catalog')}
             onClearCart={() => setCart([])}
@@ -448,6 +522,8 @@ export default function App() {
             onDeleteProduct={handleDeleteProduct}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onUpdateCustomerStatus={handleUpdateCustomerStatus}
+            onShippingSettingsChange={setShippingSettings}
+            onPromoCodesChange={setPromoCodes}
           />
         )}
       </main>
@@ -573,6 +649,8 @@ export default function App() {
         }}
         appliedPromo={appliedPromo}
         onApplyPromo={handleApplyPromo}
+        promoCodes={promoCodes}
+        shippingSettings={shippingSettings}
       />
     </div>
   );

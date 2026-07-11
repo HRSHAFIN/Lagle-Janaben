@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CreditCard, Mail, MapPin, User, CheckCircle2, ChevronRight, ShoppingBag, ExternalLink } from 'lucide-react';
-import { CartItem, Order, OrderItem } from '../types';
-import { PROMO_CODES } from '../data';
+import { CartItem, Order, OrderItem, PromoCode, ShippingSettings } from '../types';
 
 interface CheckoutViewProps {
   cart: CartItem[];
   appliedPromo: string;
+  promoCodes: PromoCode[];
+  shippingSettings: ShippingSettings;
   onPlaceOrder: (orderData: {
     customerName: string;
     customerEmail: string;
@@ -21,6 +22,8 @@ interface CheckoutViewProps {
 export default function CheckoutView({
   cart,
   appliedPromo,
+  promoCodes,
+  shippingSettings,
   onPlaceOrder,
   onBackToCatalog,
   onClearCart,
@@ -66,7 +69,7 @@ export default function CheckoutView({
 
     const pollPaymentStatus = async () => {
       try {
-        const response = await fetch(`/api/sslcommerz/order/${pendingTranId}`);
+        const response = await fetch(`/api/sslcommerz/order.php?tran_id=${pendingTranId}`);
         if (!response.ok) return;
 
         const orderData = await response.json();
@@ -105,12 +108,16 @@ export default function CheckoutView({
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   
   let discount = 0;
-  if (appliedPromo && PROMO_CODES[appliedPromo]) {
-    discount = subtotal * PROMO_CODES[appliedPromo];
+  if (appliedPromo) {
+    const promo = promoCodes.find(p => p.code === appliedPromo);
+    if (promo) {
+      discount = promo.type === 'percentage' ? subtotal * (promo.value / 100) : promo.value;
+    }
   }
 
-  const isFreeShipping = subtotal >= 150;
-  const shipping = isFreeShipping ? 0 : 10;
+  const { free_shipping_threshold, shipping_fee } = shippingSettings;
+  const isFreeShipping = subtotal >= free_shipping_threshold;
+  const shipping = isFreeShipping ? 0 : shipping_fee;
   const total = subtotal - discount + shipping;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -165,7 +172,7 @@ export default function CheckoutView({
       const randomID = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
 
       try {
-        const response = await fetch('/api/sslcommerz/initiate', {
+        const response = await fetch('/api/sslcommerz/initiate.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -311,7 +318,7 @@ export default function CheckoutView({
               <div className="flex justify-between text-gray-500">
                 <span>Shipping</span>
                 <span className="font-mono">
-                  {createdOrder.subtotal >= 150 ? 'Free' : '৳10.00'}
+                  {createdOrder.subtotal >= shippingSettings.free_shipping_threshold ? 'Free' : `৳${shippingSettings.shipping_fee.toFixed(2)}`}
                 </span>
               </div>
               <div className="border-t border-gray-200 my-2" />
@@ -828,7 +835,7 @@ export default function CheckoutView({
 
               <div className="flex justify-between text-gray-500">
                 <span>Shipping</span>
-                <span>{isFreeShipping ? 'Free Shipping' : '৳10.00'}</span>
+                <span>{isFreeShipping ? 'Free Shipping' : `৳${shipping_fee.toFixed(2)}`}</span>
               </div>
 
               <div className="border-t border-gray-200 my-4" />
@@ -847,7 +854,7 @@ export default function CheckoutView({
               </div>
               <div className="flex items-center space-x-2 text-xs font-medium text-gray-700">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-                <span>Free Insured Delivery on orders &gt; ৳150</span>
+                <span>Free Insured Delivery on orders &gt; ৳{shippingSettings.free_shipping_threshold}</span>
               </div>
             </div>
           </div>
