@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, ShoppingCart, Users, Package, Search, Plus, 
   Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2, 
-  Clock, Ship, Ban, AlertTriangle, RefreshCw, Percent, Truck
+  Clock, Ship, Ban, AlertTriangle, RefreshCw, Percent, Truck, Image, GripVertical
 } from 'lucide-react';
-import { Product, Order, Customer, AdminTabType, PromoCode, ShippingSettings } from '../types';
+import { Product, Order, Customer, AdminTabType, PromoCode, ShippingSettings, HeroSlide } from '../types';
 import { CATEGORIES } from '../data';
 
 const API_BASE = '/api';
@@ -217,6 +217,178 @@ export default function AdminDashboard({
     }
   };
 
+  // --------------------------------------------------------
+  // HERO SLIDER TAB COMPONENT
+  // --------------------------------------------------------
+  function HeroSliderTab() {
+    const [slides, setSlides] = useState<HeroSlide[]>([]);
+    const [showForm, setShowForm] = useState(false);
+    const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null);
+    const [form, setForm] = useState({ image_url: '', alt_text: '', sort_order: '' });
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+
+    const fetchSlides = () => {
+      fetch(`${API_BASE}/hero_slides.php`)
+        .then(r => r.ok ? r.json() : [])
+        .then(d => Array.isArray(d) && setSlides(d))
+        .catch(() => {});
+    };
+
+    useEffect(() => { fetchSlides(); }, []);
+
+    const resetForm = () => {
+      setForm({ image_url: '', alt_text: '', sort_order: '' });
+      setSelectedFile(null);
+      setEditingSlide(null);
+      setShowForm(false);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!form.image_url.trim() && !selectedFile) return;
+
+      const method = editingSlide ? 'PUT' : 'POST';
+      const body: any = { alt_text: form.alt_text.trim(), sort_order: form.sort_order ? parseInt(form.sort_order) : slides.length };
+      if (editingSlide) body.id = editingSlide.id;
+
+      if (selectedFile) {
+        const fd = new FormData();
+        fd.append('image_file', selectedFile);
+        fd.append('alt_text', body.alt_text);
+        fd.append('sort_order', String(body.sort_order));
+        if (editingSlide) fd.append('id', String(editingSlide.id));
+
+        setUploading(true);
+        fetch(`${API_BASE}/hero_slides.php`, { method, body: fd })
+          .then(r => { if (r.ok) { resetForm(); fetchSlides(); } })
+          .finally(() => setUploading(false));
+      } else {
+        body.image_url = form.image_url.trim();
+        fetch(`${API_BASE}/hero_slides.php`, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).then(r => { if (r.ok) { resetForm(); fetchSlides(); } });
+      }
+    };
+
+    const handleEdit = (slide: HeroSlide) => {
+      setForm({ image_url: slide.image_url, alt_text: slide.alt_text, sort_order: String(slide.sort_order) });
+      setSelectedFile(null);
+      setEditingSlide(slide);
+      setShowForm(true);
+    };
+
+    const handleDelete = (id: number) => {
+      if (!confirm('Delete this slide?')) return;
+      fetch(`${API_BASE}/hero_slides.php?id=${id}`, { method: 'DELETE' })
+        .then(r => { if (r.ok) fetchSlides(); });
+    };
+
+    const handleToggleActive = (slide: HeroSlide) => {
+      fetch(`${API_BASE}/hero_slides.php`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: slide.id, is_active: slide.is_active ? 0 : 1 }),
+      }).then(r => { if (r.ok) fetchSlides(); });
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-150 text-left" id="hero-slider-pane">
+        <div className="flex items-center justify-between">
+          <h3 className="font-sans text-lg font-bold text-gray-900">Hero Slider Images</h3>
+          <button onClick={() => { resetForm(); setShowForm(!showForm); }}
+            className="flex items-center space-x-1.5 rounded-xl bg-gray-900 px-4 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">
+            <Plus className="h-4 w-4" />
+            <span>{showForm ? 'Cancel' : 'Add Slide'}</span>
+          </button>
+        </div>
+
+        {showForm && (
+          <form onSubmit={handleSubmit} className="max-w-lg rounded-2xl border border-gray-100 bg-white p-6 shadow-sm space-y-4">
+            <div className="border-b border-gray-100 pb-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Upload from PC</p>
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                onChange={e => { setSelectedFile(e.target.files?.[0] || null); setForm({ ...form, image_url: '' }); }}
+                className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gray-900 file:text-white file:font-semibold file:text-sm hover:file:bg-gray-800" />
+              {selectedFile && <p className="mt-1 text-xs text-emerald-600">{selectedFile.name}</p>}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 border-t border-gray-200" />
+              <span className="text-xs text-gray-400 font-semibold">OR</span>
+              <div className="flex-1 border-t border-gray-200" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Image URL</label>
+              <input type="text" value={form.image_url}
+                onChange={e => { setForm({ ...form, image_url: e.target.value }); setSelectedFile(null); }}
+                placeholder="https://example.com/image.jpg"
+                className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Alt Text</label>
+              <input type="text" value={form.alt_text}
+                onChange={e => setForm({ ...form, alt_text: e.target.value })}
+                placeholder="Describe the slide"
+                className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Sort Order</label>
+              <input type="number" min="0" value={form.sort_order}
+                onChange={e => setForm({ ...form, sort_order: e.target.value })}
+                className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+            </div>
+            <button type="submit" disabled={uploading}
+              className="rounded-xl bg-gray-900 px-6 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">
+              {uploading ? 'Uploading...' : editingSlide ? 'Update Slide' : 'Add Slide'}
+            </button>
+          </form>
+        )}
+
+        <div className="space-y-3">
+          {slides.map((slide, idx) => (
+            <div key={slide.id} className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <GripVertical className="h-5 w-5 text-gray-300 flex-shrink-0" />
+              <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                <img src={slide.image_url} alt={slide.alt_text} className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/200x150?text=No+Image'; }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{slide.alt_text || `Slide ${idx + 1}`}</p>
+                <p className="text-xs text-gray-400 truncate">{slide.image_url}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => handleToggleActive(slide)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                    slide.is_active
+                      ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                  }`}>
+                  {slide.is_active ? 'Active' : 'Inactive'}
+                </button>
+                <button onClick={() => handleEdit(slide)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600">
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button onClick={() => handleDelete(slide.id)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+          {slides.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-gray-200 p-10 text-center">
+              <Image className="mx-auto h-8 w-8 text-gray-300" />
+              <p className="mt-2 text-sm text-gray-400">No slides yet. Add your first hero slider image.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
       {/* Admin Dashboard Page Title */}
@@ -323,6 +495,19 @@ export default function AdminDashboard({
           >
             <Truck className="h-4.5 w-4.5" />
             <span>Shipping</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('hero-slider')}
+            className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'hero-slider'
+                ? 'bg-gray-900 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+            id="tab-btn-hero-slider"
+          >
+            <Image className="h-4.5 w-4.5" />
+            <span>Hero Slider</span>
           </button>
         </nav>
 
@@ -948,6 +1133,13 @@ export default function AdminDashboard({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB: HERO SLIDER */}
+          {/* ======================================================== */}
+          {activeTab === 'hero-slider' && (
+            <HeroSliderTab />
           )}
 
         </div>

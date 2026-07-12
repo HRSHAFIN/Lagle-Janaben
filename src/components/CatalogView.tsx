@@ -1,9 +1,24 @@
 import { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, Star, X, ShoppingBag, Info, ShieldAlert } from 'lucide-react';
-import { Product, FilterState } from '../types';
+import { Product, FilterState, HeroSlide } from '../types';
 import { CATEGORIES } from '../data';
 // @ts-ignore
 import bannerImg from './banner.png';
+
+const API_BASE = '/api';
+
+const FALLBACK_SLIDES = [
+  { id: 1, image: bannerImg, alt: 'Banner 1' },
+  { id: 2, image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=1200&q=80', alt: 'Gift Collection' },
+  { id: 3, image: 'https://images.unsplash.com/photo-1513207565459-d7f36bfa1222?w=1200&q=80', alt: 'Luxury Gifts' },
+  { id: 4, image: 'https://images.unsplash.com/photo-1607344645866-009c320b63e0?w=1200&q=80', alt: 'Special Offers' },
+];
+
+interface SlideDisplay {
+  id: number;
+  image: string;
+  alt: string;
+}
 
 interface CatalogViewProps {
   products: Product[];
@@ -12,6 +27,8 @@ interface CatalogViewProps {
 }
 
 export default function CatalogView({ products, onAddToCart, onSelectProduct }: CatalogViewProps) {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [heroSlides, setHeroSlides] = useState<SlideDisplay[]>(FALLBACK_SLIDES);
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     category: 'All',
@@ -30,6 +47,30 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
   useEffect(() => {
     setVisibleCount(6);
   }, [filters]);
+
+  // Fetch hero slides from API
+  useEffect(() => {
+    fetch(`${API_BASE}/hero_slides.php`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: HeroSlide[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const active = data.filter(s => s.is_active).sort((a, b) => a.sort_order - b.sort_order);
+          if (active.length > 0) {
+            setHeroSlides(active.map(s => ({ id: s.id, image: s.image_url, alt: s.alt_text })));
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Auto-slide hero banner every 5 seconds
+  useEffect(() => {
+    if (heroSlides.length === 0) return;
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [heroSlides]);
 
   // Filter and sort products
   const filteredProducts = products
@@ -85,12 +126,31 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="catalog-container">
-      {/* Catalog Hero Banner (Purely Visual Decorative Banner) */}
-      <div 
-        className="mb-10 rounded-2xl h-48 sm:h-64 md:h-72 w-full relative overflow-hidden bg-cover bg-center border border-gray-100 shadow-sm" 
-        style={{ backgroundImage: `url(${bannerImg})` }}
-        id="hero-banner"
-      />
+      {/* Hero Slider Banner */}
+      <div className="mb-10 rounded-2xl h-48 sm:h-64 md:h-72 w-full relative overflow-hidden border border-gray-100 shadow-sm" id="hero-banner">
+        {heroSlides.map((slide, index) => (
+          <div
+            key={slide.id}
+            className="absolute inset-0 bg-cover bg-center transition-opacity duration-700 ease-in-out"
+            style={{
+              backgroundImage: `url(${slide.image})`,
+              opacity: index === currentSlide ? 1 : 0,
+            }}
+          />
+        ))}
+        {/* Dot indicators */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+          {heroSlides.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentSlide(index)}
+              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                index === currentSlide ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/70'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
 
       {/* Main Catalog Content */}
       <div className="lg:grid lg:grid-cols-4 lg:gap-x-8">

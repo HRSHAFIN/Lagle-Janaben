@@ -85,4 +85,12 @@ export interface User {
 
 export type ViewType = 'catalog' | 'checkout' | 'admin' | 'order-success' | 'product-detail' | 'login' | 'register';
 
-export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers' | 'promos' | 'shipping';
+export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers' | 'promos' | 'shipping' | 'hero-slider';
+
+export interface HeroSlide {
+  id: number;
+  image_url: string;
+  alt_text: string;
+  sort_order: number;
+  is_active: number;
+}

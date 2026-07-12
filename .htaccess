@@ -17,6 +17,7 @@ RewriteRule ^api/orders$ api/orders.php [L,QSA]
 RewriteRule ^api/customers$ api/customers.php [L,QSA]
 RewriteRule ^api/promo_codes$ api/promo_codes.php [L,QSA]
 RewriteRule ^api/shipping_settings$ api/shipping_settings.php [L,QSA]
+RewriteRule ^api/hero_slides$ api/hero_slides.php [L,QSA]
 
 # If the requested file or directory exists, serve it directly
 RewriteCond %{REQUEST_FILENAME} !-f

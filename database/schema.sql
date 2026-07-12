@@ -150,3 +150,22 @@ CREATE TABLE IF NOT EXISTS shipping_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO shipping_settings (shipping_fee, free_shipping_threshold) VALUES (10.00, 150.00);
+
+-- -----------------------------------------------------------
+-- Hero Slider Images (manageable from admin panel)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS hero_slides (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  image_url   VARCHAR(500)  NOT NULL,
+  alt_text    VARCHAR(255)  DEFAULT NULL,
+  sort_order  INT           NOT NULL DEFAULT 0,
+  is_active   TINYINT(1)    NOT NULL DEFAULT 1,
+  created_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO hero_slides (image_url, alt_text, sort_order, is_active) VALUES
+('./banner.png', 'Banner 1', 0, 1),
+('https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=1200&q=80', 'Gift Collection', 1, 1),
+('https://images.unsplash.com/photo-1513207565459-d7f36bfa1222?w=1200&q=80', 'Luxury Gifts', 2, 1),
+('https://images.unsplash.com/photo-1607344645866-009c320b63e0?w=1200&q=80', 'Special Offers', 3, 1);
