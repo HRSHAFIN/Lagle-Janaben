@@ -1,5 +1,6 @@
-import { ShoppingBag, LayoutDashboard } from 'lucide-react';
-import { ViewType } from '../types';
+import { useState } from 'react';
+import { ShoppingBag, LayoutDashboard, LogOut, User as UserIcon } from 'lucide-react';
+import { User, ViewType } from '../types';
 import Logo from './Logo';
 
 interface NavbarProps {
@@ -7,9 +8,13 @@ interface NavbarProps {
   onViewChange: (view: ViewType) => void;
   cartCount: number;
   onCartClick: () => void;
+  currentUser: User | null;
+  onLogout: () => void;
 }
 
-export default function Navbar({ currentView, onViewChange, cartCount, onCartClick }: NavbarProps) {
+export default function Navbar({ currentView, onViewChange, cartCount, onCartClick, currentUser, onLogout }: NavbarProps) {
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-gray-100 bg-white/80 backdrop-blur-md" id="store-header">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-2.5 sm:px-6 lg:px-8">
@@ -65,6 +70,56 @@ export default function Navbar({ currentView, onViewChange, cartCount, onCartCli
 
           {/* Vertical Divider */}
           <span className="h-5 w-px bg-gray-200" aria-hidden="true" />
+
+          {/* Account: Sign In / User Menu */}
+          {currentUser ? (
+            <div className="relative">
+              <button
+                id="nav-account-btn"
+                onClick={() => setAccountMenuOpen((v) => !v)}
+                className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-[#1E2D44] font-sans text-xs sm:text-sm font-bold text-white shadow-sm transition-transform active:scale-95"
+                aria-label="Account menu"
+              >
+                {currentUser.name.trim().charAt(0).toUpperCase() || 'U'}
+              </button>
+
+              {accountMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setAccountMenuOpen(false)} />
+                  <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-gray-100 bg-white p-2 shadow-lg animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-2 border-b border-gray-50 mb-1">
+                      <p className="font-sans text-sm font-semibold text-gray-900 truncate">{currentUser.name}</p>
+                      <p className="font-sans text-xs text-gray-400 truncate">{currentUser.email}</p>
+                    </div>
+                    <button
+                      id="nav-logout-btn"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="flex w-full items-center space-x-2 rounded-lg px-3 py-2 font-sans text-sm font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <button
+              id="nav-login-btn"
+              onClick={() => onViewChange('login')}
+              className={`flex items-center space-x-1 rounded-lg px-2 py-2 sm:px-3 sm:space-x-1.5 font-sans text-xs sm:text-sm font-medium transition-colors ${
+                currentView === 'login' || currentView === 'register'
+                  ? 'bg-gray-50 text-gray-900'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <UserIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign In</span>
+            </button>
+          )}
 
           {/* Cart Icon Button */}
           <button

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Product, Order, Customer, CartItem, ViewType, PromoCode, ShippingSettings } from './types';
+import { Product, Order, Customer, CartItem, ViewType, PromoCode, ShippingSettings, User } from './types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_ORDERS } from './data';
 import Navbar from './components/Navbar';
 import CatalogView from './components/CatalogView';
@@ -7,6 +7,8 @@ import CartDrawer from './components/CartDrawer';
 import CheckoutView from './components/CheckoutView';
 import AdminDashboard from './components/AdminDashboard';
 import ProductDetailView from './components/ProductDetailView';
+import Login from './components/Login';
+import Register from './components/Register';
 import Logo from './components/Logo';
 import { Mail, Phone, MapPin, Heart, ShieldCheck } from 'lucide-react';
 
@@ -43,6 +45,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({ shipping_fee: 10, free_shipping_threshold: 150 });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // --------------------------------------------------------
   // FETCH INITIAL DATA FROM PHP API
@@ -64,6 +67,81 @@ export default function App() {
       })
       .catch(err => console.warn('Could not fetch from PHP API, using local data:', err));
   }, []);
+
+  // --------------------------------------------------------
+  // RESTORE AUTH SESSION
+  // --------------------------------------------------------
+  useEffect(() => {
+    fetch(`${API_BASE}/auth.php?action=me`)
+      .then(r => r.ok ? r.json() : Promise.resolve(null))
+      .then(data => {
+        if (data?.user) setCurrentUser(data.user);
+      })
+      .catch(err => console.warn('Could not restore auth session:', err));
+  }, []);
+
+  // --------------------------------------------------------
+  // AUTH CONTROLLERS
+  // --------------------------------------------------------
+  const handleLogin = async (identifier: string, password: string): Promise<string | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth.php?action=login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error || 'Could not sign in. Please try again.';
+      setCurrentUser(data.user);
+      setCurrentView('catalog');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return null;
+    } catch {
+      return 'Connection failed. Please check your network and try again.';
+    }
+  };
+
+  const handleRegister = async (formData: { name: string; email: string; phone: string; password: string }): Promise<string | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth.php?action=register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error || 'Could not create your account. Please try again.';
+      setCurrentUser(data.user);
+      setCurrentView('catalog');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return null;
+    } catch {
+      return 'Connection failed. Please check your network and try again.';
+    }
+  };
+
+  const handleGoogleLogin = async (credential: string): Promise<string | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth.php?action=google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await res.json();
+      if (!res.ok) return data.error || 'Google sign-in failed. Please try again.';
+      setCurrentUser(data.user);
+      setCurrentView('catalog');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return null;
+    } catch {
+      return 'Connection failed. Please check your network and try again.';
+    }
+  };
+
+  const handleLogout = () => {
+    fetch(`${API_BASE}/auth.php?action=logout`, { method: 'POST' }).catch(() => {});
+    setCurrentUser(null);
+    setCurrentView('catalog');
+  };
 
   // SSLCommerz payment callback detection & local state synchronization
   useEffect(() => {
@@ -469,6 +547,8 @@ export default function App() {
         }}
         cartCount={totalCartItems}
         onCartClick={() => setCartOpen(true)}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Screen Router */}
@@ -509,6 +589,24 @@ export default function App() {
             onBackToCatalog={() => setCurrentView('catalog')}
             onClearCart={() => setCart([])}
             initialOrder={sslCompletedOrder}
+          />
+        )}
+
+        {currentView === 'login' && (
+          <Login
+            onLogin={handleLogin}
+            onGoogleLogin={handleGoogleLogin}
+            onNavigateRegister={() => setCurrentView('register')}
+            onBackToCatalog={() => setCurrentView('catalog')}
+          />
+        )}
+
+        {currentView === 'register' && (
+          <Register
+            onRegister={handleRegister}
+            onGoogleLogin={handleGoogleLogin}
+            onNavigateLogin={() => setCurrentView('login')}
+            onBackToCatalog={() => setCurrentView('catalog')}
           />
         )}
 

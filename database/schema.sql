@@ -78,6 +78,24 @@ CREATE TABLE IF NOT EXISTS customers (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------
+-- Users (Storefront Accounts / Auth)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+  id            VARCHAR(32)   NOT NULL PRIMARY KEY,
+  name          VARCHAR(255)  NOT NULL,
+  email         VARCHAR(255)  NOT NULL,
+  phone         VARCHAR(20)   DEFAULT NULL,
+  password_hash VARCHAR(255)  DEFAULT NULL,
+  auth_provider ENUM('local','google') NOT NULL DEFAULT 'local',
+  google_id     VARCHAR(64)   DEFAULT NULL,
+  created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_users_email (email),
+  UNIQUE KEY uk_users_phone (phone),
+  UNIQUE KEY uk_users_google_id (google_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------
 -- Seed data
 -- -----------------------------------------------------------
 INSERT INTO products (id, name, description, price, category, image, images, inventory, rating, featured, status) VALUES

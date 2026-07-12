@@ -75,6 +75,14 @@ export interface ShippingSettings {
   free_shipping_threshold: number;
 }
 
-export type ViewType = 'catalog' | 'checkout' | 'admin' | 'order-success' | 'product-detail';
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  authProvider: 'local' | 'google';
+}
+
+export type ViewType = 'catalog' | 'checkout' | 'admin' | 'order-success' | 'product-detail' | 'login' | 'register';
 
 export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers' | 'promos' | 'shipping';
