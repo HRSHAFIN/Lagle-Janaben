@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Percent } from 'lucide-react';
-import { CartItem } from '../types';
-import { PROMO_CODES } from '../data';
+import { CartItem, PromoCode, ShippingSettings } from '../types';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -12,6 +11,8 @@ interface CartDrawerProps {
   onProceedToCheckout: () => void;
   appliedPromo: string;
   onApplyPromo: (code: string) => void;
+  promoCodes: PromoCode[];
+  shippingSettings: ShippingSettings;
 }
 
 export default function CartDrawer({
@@ -23,6 +24,8 @@ export default function CartDrawer({
   onProceedToCheckout,
   appliedPromo,
   onApplyPromo,
+  promoCodes,
+  shippingSettings,
 }: CartDrawerProps) {
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState('');
@@ -34,15 +37,17 @@ export default function CartDrawer({
   
   // Calculate promo discount
   let discount = 0;
-  if (appliedPromo && PROMO_CODES[appliedPromo]) {
-    const rate = PROMO_CODES[appliedPromo];
-    discount = subtotal * rate;
+  if (appliedPromo) {
+    const promo = promoCodes.find(p => p.code === appliedPromo && p.is_active);
+    if (promo) {
+      discount = promo.type === 'percentage' ? subtotal * (promo.value / 100) : promo.value;
+    }
   }
 
   const finalTotal = subtotal - discount;
   const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const freeShippingThreshold = 150;
-  const shippingLeft = freeShippingThreshold - subtotal;
+  const freeShippingThreshold = shippingSettings.free_shipping_threshold;
+  const shippingLeft = Math.max(freeShippingThreshold - subtotal, 0);
 
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,13 +60,14 @@ export default function CartDrawer({
       return;
     }
 
-    if (PROMO_CODES[formattedCode] !== undefined) {
+    const promo = promoCodes.find(p => p.code === formattedCode && p.is_active);
+    if (promo) {
       onApplyPromo(formattedCode);
-      const discountPercentage = PROMO_CODES[formattedCode] * 100;
-      setPromoSuccessMsg(`Promo code applied successfully! Saved ${discountPercentage}%`);
+      const discountText = promo.type === 'percentage' ? `${promo.value}%` : `৳${promo.value.toFixed(2)}`;
+      setPromoSuccessMsg(`Promo code applied successfully! Saved ${discountText}`);
       setPromoInput('');
     } else {
-      setPromoError('Invalid promo code. Try WELCOME10 or AURA20');
+      setPromoError('Invalid promo code');
     }
   };
 
@@ -282,14 +288,14 @@ export default function CartDrawer({
                 <div className="flex justify-between text-gray-500">
                   <span>Shipping</span>
                   <span className="font-sans text-xs uppercase font-semibold text-gray-800">
-                    {subtotal >= freeShippingThreshold ? 'Free' : '৳10.00'}
+                    {subtotal >= freeShippingThreshold ? 'Free' : `৳${shippingSettings.shipping_fee.toFixed(2)}`}
                   </span>
                 </div>
                 <div className="border-t border-gray-200 my-2" />
                 <div className="flex justify-between font-bold text-gray-900 text-base">
                   <span>Total Due</span>
                   <span className="font-mono">
-                    ৳{(finalTotal + (subtotal >= freeShippingThreshold ? 0 : 10)).toFixed(2)}
+                    ৳{(finalTotal + (subtotal >= freeShippingThreshold ? 0 : shippingSettings.shipping_fee)).toFixed(2)}
                   </span>
                 </div>
               </div>

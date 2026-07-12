@@ -57,6 +57,24 @@ export interface FilterState {
   sortBy: 'featured' | 'price-asc' | 'price-desc' | 'rating';
 }
 
+export interface PromoCode {
+  id: number;
+  code: string;
+  type: 'percentage' | 'flat';
+  value: number;
+  min_order_amount: number | null;
+  usage_limit: number | null;
+  used_count: number;
+  is_active: number;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface ShippingSettings {
+  shipping_fee: number;
+  free_shipping_threshold: number;
+}
+
 export type ViewType = 'catalog' | 'checkout' | 'admin' | 'order-success' | 'product-detail';
 
-export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers';
+export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers' | 'promos' | 'shipping';

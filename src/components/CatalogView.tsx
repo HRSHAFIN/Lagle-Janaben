@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, Star, X, ShoppingBag, Info, ShieldAlert } from 'lucide-react';
 import { Product, FilterState } from '../types';
 import { CATEGORIES } from '../data';
+// @ts-ignore
+import bannerImg from './banner.png';
 
 interface CatalogViewProps {
   products: Product[];
@@ -86,7 +88,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
       {/* Catalog Hero Banner (Purely Visual Decorative Banner) */}
       <div 
         className="mb-10 rounded-2xl h-48 sm:h-64 md:h-72 w-full relative overflow-hidden bg-cover bg-center border border-gray-100 shadow-sm" 
-        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&w=1600&q=80')" }}
+        style={{ backgroundImage: `url(${bannerImg})` }}
         id="hero-banner"
       />
 
