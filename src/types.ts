@@ -6,6 +6,8 @@ export interface Product {
   category: string;
   image: string;
   images?: string[];
+  material?: string | null;
+  dimensions?: string | null;
   inventory: number;
   rating: number;
   featured: boolean;
@@ -18,12 +20,14 @@ export interface CartItem {
 }
 
 export interface OrderItem {
-  productId: string;
+  productId: string | null;
   name: string;
   price: number;
   quantity: number;
   image?: string;
 }
+
+export type PaymentMethod = 'Cash on Delivery' | 'SSLCommerz';
 
 export interface Order {
   id: string;
@@ -35,8 +39,9 @@ export interface Order {
   discount: number;
   total: number;
   status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+  paymentStatus: 'unpaid' | 'paid' | 'failed';
   createdAt: string;
-  paymentMethod: string;
+  paymentMethod: PaymentMethod;
 }
 
 export interface Customer {
@@ -58,14 +63,14 @@ export interface FilterState {
 }
 
 export interface PromoCode {
-  id: number;
+  id: string;
   code: string;
   type: 'percentage' | 'flat';
   value: number;
   min_order_amount: number | null;
   usage_limit: number | null;
   used_count: number;
-  is_active: number;
+  is_active: boolean;
   expires_at: string | null;
   created_at: string;
 }
@@ -75,22 +80,33 @@ export interface ShippingSettings {
   free_shipping_threshold: number;
 }
 
+export type UserRole = 'customer' | 'admin';
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  phone: string | null;
-  authProvider: 'local' | 'google';
+  role: UserRole;
 }
 
-export type ViewType = 'catalog' | 'checkout' | 'admin' | 'order-success' | 'product-detail' | 'login' | 'register';
+export type ViewType = 'catalog' | 'checkout' | 'admin' | 'order-success' | 'product-detail' | 'login' | 'register' | 'my-orders';
 
-export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers' | 'promos' | 'shipping' | 'hero-slider';
+export type AdminTabType = 'overview' | 'products' | 'orders' | 'customers' | 'accounts' | 'promos' | 'shipping' | 'hero-slider';
+
+export interface Account {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: UserRole;
+  createdAt: string;
+}
 
 export interface HeroSlide {
-  id: number;
+  id: string;
   image_url: string;
+  image_key: string | null;
   alt_text: string;
   sort_order: number;
-  is_active: number;
+  is_active: boolean;
 }

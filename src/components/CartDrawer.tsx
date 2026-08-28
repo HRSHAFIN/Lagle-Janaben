@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Percent } from 'lucide-react';
-import { CartItem, PromoCode, ShippingSettings } from '../types';
+import { CartItem, ShippingSettings } from '../types';
+import { computeOrderTotals } from '../lib/pricing';
+
+interface AppliedPromo {
+  code: string;
+  discount: number;
+}
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -9,9 +15,10 @@ interface CartDrawerProps {
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onRemoveItem: (productId: string) => void;
   onProceedToCheckout: () => void;
-  appliedPromo: string;
-  onApplyPromo: (code: string) => void;
-  promoCodes: PromoCode[];
+  appliedPromo: AppliedPromo | null;
+  promoError: string;
+  onApplyPromo: (code: string) => Promise<void>;
+  onRemovePromo: () => void;
   shippingSettings: ShippingSettings;
 }
 
@@ -23,72 +30,49 @@ export default function CartDrawer({
   onRemoveItem,
   onProceedToCheckout,
   appliedPromo,
+  promoError,
   onApplyPromo,
-  promoCodes,
+  onRemovePromo,
   shippingSettings,
 }: CartDrawerProps) {
   const [promoInput, setPromoInput] = useState('');
-  const [promoError, setPromoError] = useState('');
-  const [promoSuccessMsg, setPromoSuccessMsg] = useState('');
+  const [applying, setApplying] = useState(false);
 
   if (!isOpen) return null;
 
-  const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  
-  // Calculate promo discount
-  let discount = 0;
-  if (appliedPromo) {
-    const promo = promoCodes.find(p => p.code === appliedPromo && p.is_active);
-    if (promo) {
-      discount = promo.type === 'percentage' ? subtotal * (promo.value / 100) : promo.value;
-    }
-  }
-
-  const finalTotal = subtotal - discount;
+  const { subtotal, discount, shippingFee, total } = computeOrderTotals(
+    cart,
+    appliedPromo?.discount ?? 0,
+    shippingSettings
+  );
   const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const freeShippingThreshold = shippingSettings.free_shipping_threshold;
   const shippingLeft = Math.max(freeShippingThreshold - subtotal, 0);
 
-  const handleApplyPromo = (e: React.FormEvent) => {
+  const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPromoError('');
-    setPromoSuccessMsg('');
-    
-    const formattedCode = promoInput.trim().toUpperCase();
-    if (!formattedCode) {
-      setPromoError('Please enter a promo code');
-      return;
-    }
-
-    const promo = promoCodes.find(p => p.code === formattedCode && p.is_active);
-    if (promo) {
-      onApplyPromo(formattedCode);
-      const discountText = promo.type === 'percentage' ? `${promo.value}%` : `৳${promo.value.toFixed(2)}`;
-      setPromoSuccessMsg(`Promo code applied successfully! Saved ${discountText}`);
+    if (!promoInput.trim()) return;
+    setApplying(true);
+    try {
+      await onApplyPromo(promoInput.trim());
       setPromoInput('');
-    } else {
-      setPromoError('Invalid promo code');
+    } finally {
+      setApplying(false);
     }
-  };
-
-  const handleRemovePromo = () => {
-    onApplyPromo('');
-    setPromoSuccessMsg('');
-    setPromoError('');
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden" id="cart-drawer-overlay">
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity animate-in fade-in-50 duration-200" 
-        onClick={onClose} 
+      <div
+        className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity animate-in fade-in-50 duration-200"
+        onClick={onClose}
       />
 
       <div className="absolute inset-y-0 right-0 flex max-w-full" id="cart-drawer-container">
         {/* Sliding Panel */}
         <div className="w-screen max-w-[calc(100vw-24px)] sm:max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-250">
-          
+
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-5 sm:px-6 border-b border-gray-100">
             <div className="flex items-center space-x-2">
@@ -109,7 +93,7 @@ export default function CartDrawer({
 
           {/* Cart Contents */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-            
+
             {/* Shipping Progress */}
             {subtotal > 0 && (
               <div className="rounded-xl bg-gray-50 p-4 border border-gray-100" id="shipping-progress">
@@ -119,7 +103,7 @@ export default function CartDrawer({
                       You are <span className="font-bold text-gray-900">৳{shippingLeft.toFixed(2)}</span> away from <span className="font-semibold text-gray-900">Free Shipping</span>.
                     </p>
                     <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gray-900 rounded-full transition-all duration-300"
                         style={{ width: `${Math.min((subtotal / freeShippingThreshold) * 100, 100)}%` }}
                       />
@@ -231,22 +215,22 @@ export default function CartDrawer({
           {/* Footer Calculations */}
           {cart.length > 0 && (
             <div className="border-t border-gray-100 bg-gray-50 px-4 py-5 sm:px-6 space-y-4">
-              
+
               {/* Promo Code Form */}
               <form onSubmit={handleApplyPromo} className="flex space-x-2" id="promo-code-form">
                 <input
                   type="text"
-                  placeholder={appliedPromo ? `Promo: ${appliedPromo}` : "Promo code (WELCOME10, AURA20)"}
+                  placeholder={appliedPromo ? `Promo: ${appliedPromo.code}` : "Promo code (WELCOME10, AURA20)"}
                   value={promoInput}
                   onChange={(e) => setPromoInput(e.target.value)}
-                  disabled={!!appliedPromo}
+                  disabled={!!appliedPromo || applying}
                   className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:border-gray-900 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                   id="promo-input"
                 />
                 {appliedPromo ? (
                   <button
                     type="button"
-                    onClick={handleRemovePromo}
+                    onClick={onRemovePromo}
                     className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 font-sans text-xs font-semibold text-red-600 hover:bg-red-100"
                     id="promo-remove-btn"
                   >
@@ -255,10 +239,11 @@ export default function CartDrawer({
                 ) : (
                   <button
                     type="submit"
-                    className="rounded-lg bg-gray-900 px-4 py-2 font-sans text-xs font-semibold text-white hover:bg-gray-800"
+                    disabled={applying}
+                    className="rounded-lg bg-gray-900 px-4 py-2 font-sans text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
                     id="promo-apply-btn"
                   >
-                    Apply
+                    {applying ? 'Checking...' : 'Apply'}
                   </button>
                 )}
               </form>
@@ -267,8 +252,10 @@ export default function CartDrawer({
               {promoError && (
                 <p className="text-[11px] font-medium text-red-500 text-left" id="promo-error">{promoError}</p>
               )}
-              {promoSuccessMsg && (
-                <p className="text-[11px] font-medium text-emerald-600 text-left" id="promo-success">{promoSuccessMsg}</p>
+              {appliedPromo && !promoError && (
+                <p className="text-[11px] font-medium text-emerald-600 text-left" id="promo-success">
+                  Promo code applied successfully! Saved ৳{discount.toFixed(2)}
+                </p>
               )}
 
               {/* Detailed Breakdown */}
@@ -280,7 +267,7 @@ export default function CartDrawer({
                 {discount > 0 && (
                   <div className="flex justify-between text-emerald-600">
                     <span className="flex items-center">
-                      Discount ({appliedPromo})
+                      Discount ({appliedPromo?.code})
                     </span>
                     <span className="font-mono">-৳{discount.toFixed(2)}</span>
                   </div>
@@ -288,15 +275,13 @@ export default function CartDrawer({
                 <div className="flex justify-between text-gray-500">
                   <span>Shipping</span>
                   <span className="font-sans text-xs uppercase font-semibold text-gray-800">
-                    {subtotal >= freeShippingThreshold ? 'Free' : `৳${shippingSettings.shipping_fee.toFixed(2)}`}
+                    {shippingFee === 0 ? 'Free' : `৳${shippingFee.toFixed(2)}`}
                   </span>
                 </div>
                 <div className="border-t border-gray-200 my-2" />
                 <div className="flex justify-between font-bold text-gray-900 text-base">
                   <span>Total Due</span>
-                  <span className="font-mono">
-                    ৳{(finalTotal + (subtotal >= freeShippingThreshold ? 0 : shippingSettings.shipping_fee)).toFixed(2)}
-                  </span>
+                  <span className="font-mono">৳{total.toFixed(2)}</span>
                 </div>
               </div>
 

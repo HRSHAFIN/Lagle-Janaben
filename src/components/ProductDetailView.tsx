@@ -45,38 +45,19 @@ export default function ProductDetailView({
     }
   };
 
-  // Structured custom content based on categories/names
+  // Material/dimensions come from the product record itself (admin-editable);
+  // only the category-based fallback is generic copy.
   const getExtendedDetails = (p: Product) => {
-    const isTech = p.category.toLowerCase() === 'technology';
-    const isAccessory = p.category.toLowerCase() === 'accessories';
     const isApparel = p.category.toLowerCase() === 'apparel';
-
-    let material = "Sourced from local sustainable premium workshops in Bangladesh";
-    let dimensions = "Standard size fits most";
-    let boxContent = `1x ${p.name}, Curated Gift Box Wrap, Personalized Handwritten Card (Optional), Premium Wax Seal Ribbon.`;
-
-    if (p.id === 'prod-1') {
-      material = "Premium hybrid composite, high-density memory foam leatherette, lightweight alloy joints";
-      dimensions = "180mm x 165mm x 80mm | Weight: 260g";
-    } else if (p.id === 'prod-2' || p.id === 'prod-8') {
-      material = "Premium full-grain vegetable-tanned Bangladeshi leather, solid brass hardware, organic cotton lining";
-      dimensions = p.id === 'prod-2' ? "42cm x 30cm x 15cm (Holds up to 16\" laptop)" : "10cm x 7.5cm x 0.6cm (Slim profile)";
-    } else if (p.id === 'prod-3') {
-      material = "Surgical-grade 316L stainless steel, sapphire-coated crystal glass, genuine leather interchangeable strap";
-      dimensions = "Case Diameter: 40mm | Case Thickness: 7.2mm | Strap Width: 20mm";
-    } else if (p.id === 'prod-4') {
-      material = "Anodized CNC aluminum top case, double-shot PBT keycaps, high-lubricity mechanical switches";
-      dimensions = "315mm x 125mm x 38mm | Weight: 980g";
-    } else if (p.id === 'prod-5') {
-      material = "Double-walled borosilicate thermal glass, high-temperature glazed stoneware ceramic dripper";
-      dimensions = "Dripper: Size 02 (1-4 cups) | Server Capacity: 600ml";
-    } else if (p.id === 'prod-6') {
-      material = "Solid C360 solid cartridge brass, polished satin finish, natural heavy anti-oxidation coating";
-      dimensions = "140mm x 60mm x 55mm | Weight: 420g";
-    } else if (isApparel) {
-      material = "100% Organic long-staple combed cotton / Extrafine Merino wool, zero toxic dyes, pre-shrunk premium weave";
-      dimensions = "Classic regular modern fit. View sizing chart for custom measurements.";
-    }
+    const material =
+      p.material ||
+      (isApparel
+        ? 'Premium organic cotton / extrafine merino wool blend, ethically sourced'
+        : 'Sourced from local sustainable premium workshops in Bangladesh');
+    const dimensions =
+      p.dimensions ||
+      (isApparel ? 'Classic regular modern fit. View sizing chart for custom measurements.' : 'Standard size fits most');
+    const boxContent = `1x ${p.name}, Curated Gift Box Wrap, Personalized Handwritten Card (Optional), Premium Wax Seal Ribbon.`;
 
     return { material, dimensions, boxContent };
   };
@@ -289,6 +270,7 @@ export default function ProductDetailView({
                     <button
                       onClick={handleDecrement}
                       disabled={quantity <= 1}
+                      aria-label="Decrease quantity"
                       className="px-2.5 py-1 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       -
@@ -297,6 +279,7 @@ export default function ProductDetailView({
                     <button
                       onClick={handleIncrement}
                       disabled={quantity >= product.inventory}
+                      aria-label="Increase quantity"
                       className="px-2.5 py-1 text-gray-500 hover:text-gray-800 disabled:opacity-30"
                     >
                       +

@@ -1,21 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Search, SlidersHorizontal, Star, X, ShoppingBag, Info, ShieldAlert } from 'lucide-react';
-import { Product, FilterState, HeroSlide } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, SlidersHorizontal, Star, X, ShoppingBag, Info } from 'lucide-react';
+import { Product, FilterState } from '../types';
 import { CATEGORIES } from '../data';
-// @ts-ignore
-import bannerImg from './banner.png';
-
-const API_BASE = '/api';
-
-const FALLBACK_SLIDES = [
-  { id: 1, image: bannerImg, alt: 'Banner 1' },
-  { id: 2, image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=1200&q=80', alt: 'Gift Collection' },
-  { id: 3, image: 'https://images.unsplash.com/photo-1513207565459-d7f36bfa1222?w=1200&q=80', alt: 'Luxury Gifts' },
-  { id: 4, image: 'https://images.unsplash.com/photo-1607344645866-009c320b63e0?w=1200&q=80', alt: 'Special Offers' },
-];
+import { fetchHeroSlides } from '../lib/api/heroSlides';
 
 interface SlideDisplay {
-  id: number;
+  id: string;
   image: string;
   alt: string;
 }
@@ -28,7 +18,7 @@ interface CatalogViewProps {
 
 export default function CatalogView({ products, onAddToCart, onSelectProduct }: CatalogViewProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [heroSlides, setHeroSlides] = useState<SlideDisplay[]>(FALLBACK_SLIDES);
+  const [heroSlides, setHeroSlides] = useState<SlideDisplay[]>([]);
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     category: 'All',
@@ -37,7 +27,6 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
     sortBy: 'featured',
   });
 
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
 
   // Pagination state for "All" category
@@ -48,19 +37,19 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
     setVisibleCount(6);
   }, [filters]);
 
-  // Fetch hero slides from API
+  // Fetch hero slides from InsForge
   useEffect(() => {
-    fetch(`${API_BASE}/hero_slides.php`)
-      .then(r => r.ok ? r.json() : [])
-      .then((data: HeroSlide[]) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const active = data.filter(s => s.is_active).sort((a, b) => a.sort_order - b.sort_order);
-          if (active.length > 0) {
-            setHeroSlides(active.map(s => ({ id: s.id, image: s.image_url, alt: s.alt_text })));
-          }
-        }
+    let cancelled = false;
+    fetchHeroSlides()
+      .then((slides) => {
+        if (cancelled) return;
+        const active = slides.filter((s) => s.is_active).sort((a, b) => a.sort_order - b.sort_order);
+        setHeroSlides(active.map((s) => ({ id: s.id, image: s.image_url, alt: s.alt_text })));
       })
-      .catch(() => {});
+      .catch((err) => console.warn('Could not load hero slides:', err));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Auto-slide hero banner every 5 seconds
@@ -72,42 +61,50 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
     return () => clearInterval(interval);
   }, [heroSlides]);
 
+  // Active products only, computed once per products change (reused for the grid and category counts)
+  const activeProducts = useMemo(() => products.filter((p) => p.status === 'Active'), [products]);
+
   // Filter and sort products
-  const filteredProducts = products
-    .filter((product) => {
-      // Status filter (only show Active products in the shop catalog)
-      if (product.status !== 'Active') return false;
+  const filteredProducts = useMemo(() => {
+    return activeProducts
+      .filter((product) => {
+        const matchesSearch =
+          product.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+          product.description.toLowerCase().includes(filters.search.toLowerCase());
 
-      // Search query filter
-      const matchesSearch =
-        product.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        product.description.toLowerCase().includes(filters.search.toLowerCase());
+        const matchesCategory =
+          filters.category === 'All' || product.category === filters.category;
 
-      // Category filter
-      const matchesCategory =
-        filters.category === 'All' || product.category === filters.category;
+        const matchesPrice =
+          product.price >= filters.minPrice && product.price <= filters.maxPrice;
 
-      // Price filter
-      const matchesPrice =
-        product.price >= filters.minPrice && product.price <= filters.maxPrice;
+        return matchesSearch && matchesCategory && matchesPrice;
+      })
+      .sort((a, b) => {
+        if (filters.sortBy === 'featured') {
+          return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
+        }
+        if (filters.sortBy === 'price-asc') {
+          return a.price - b.price;
+        }
+        if (filters.sortBy === 'price-desc') {
+          return b.price - a.price;
+        }
+        if (filters.sortBy === 'rating') {
+          return b.rating - a.rating;
+        }
+        return 0;
+      });
+  }, [activeProducts, filters]);
 
-      return matchesSearch && matchesCategory && matchesPrice;
-    })
-    .sort((a, b) => {
-      if (filters.sortBy === 'featured') {
-        return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
-      }
-      if (filters.sortBy === 'price-asc') {
-        return a.price - b.price;
-      }
-      if (filters.sortBy === 'price-desc') {
-        return b.price - a.price;
-      }
-      if (filters.sortBy === 'rating') {
-        return b.rating - a.rating;
-      }
-      return 0;
-    });
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: activeProducts.length };
+    for (const category of CATEGORIES) {
+      if (category === 'All') continue;
+      counts[category] = activeProducts.filter((p) => p.category === category).length;
+    }
+    return counts;
+  }, [activeProducts]);
 
   const isAllCategory = filters.category === 'All';
   const displayedProducts = isAllCategory
@@ -127,30 +124,37 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="catalog-container">
       {/* Hero Slider Banner */}
-      <div className="mb-10 rounded-2xl h-48 sm:h-64 md:h-72 w-full relative overflow-hidden border border-gray-100 shadow-sm" id="hero-banner">
-        {heroSlides.map((slide, index) => (
-          <div
-            key={slide.id}
-            className="absolute inset-0 bg-cover bg-center transition-opacity duration-700 ease-in-out"
-            style={{
-              backgroundImage: `url(${slide.image})`,
-              opacity: index === currentSlide ? 1 : 0,
-            }}
-          />
-        ))}
-        {/* Dot indicators */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
-          {heroSlides.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentSlide(index)}
-              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                index === currentSlide ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/70'
-              }`}
+      {heroSlides.length > 0 && (
+        <div className="mb-10 rounded-2xl h-48 sm:h-64 md:h-72 w-full relative overflow-hidden border border-gray-100 shadow-sm" id="hero-banner">
+          {heroSlides.map((slide, index) => (
+            <div
+              key={slide.id}
+              role="img"
+              aria-label={slide.alt || 'Lagle Janaben promotional banner'}
+              aria-hidden={index === currentSlide ? undefined : true}
+              className="absolute inset-0 bg-cover bg-center transition-opacity duration-700 ease-in-out"
+              style={{
+                backgroundImage: `url(${slide.image})`,
+                opacity: index === currentSlide ? 1 : 0,
+              }}
             />
           ))}
+          {/* Dot indicators */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+            {heroSlides.map((slide, index) => (
+              <button
+                key={slide.id}
+                onClick={() => setCurrentSlide(index)}
+                aria-label={`Show slide ${index + 1}: ${slide.alt || ''}`}
+                aria-current={index === currentSlide}
+                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                  index === currentSlide ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/70'
+                }`}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Catalog Content */}
       <div className="lg:grid lg:grid-cols-4 lg:gap-x-8">
@@ -188,14 +192,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
                     }`}
                   >
                     <span>{category}</span>
-                    {category === 'All' && (
-                      <span className="font-mono text-xs opacity-75">({products.filter(p => p.status === 'Active').length})</span>
-                    )}
-                    {category !== 'All' && (
-                      <span className="font-mono text-xs opacity-75">
-                        ({products.filter(p => p.category === category && p.status === 'Active').length})
-                      </span>
-                    )}
+                    <span className="font-mono text-xs opacity-75">({categoryCounts[category] ?? 0})</span>
                   </button>
                 ))}
               </div>

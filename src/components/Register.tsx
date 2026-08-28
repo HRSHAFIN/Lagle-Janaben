@@ -2,15 +2,19 @@ import React, { useState } from 'react';
 import { ArrowLeft, Check, Eye, EyeOff, Gift, Lock, Mail, Phone, ShieldCheck, User as UserIcon } from 'lucide-react';
 import Logo from './Logo';
 import GoogleAuthButton from './GoogleAuthButton';
+import { isValidBdPhone, isValidEmail } from '../lib/validation';
 
 interface RegisterProps {
-  onRegister: (data: { name: string; email: string; phone: string; password: string }) => Promise<string | null>;
-  onGoogleLogin: (credential: string) => Promise<string | null>;
+  onRegister: (data: { name: string; email: string; phone: string; password: string }) => Promise<{
+    error: string | null;
+    requiresVerification: boolean;
+  }>;
+  onVerifyCode: (email: string, otp: string, phone: string) => Promise<string | null>;
+  onResendCode: (email: string) => Promise<void>;
+  onGoogleLogin: () => void;
   onNavigateLogin: () => void;
   onBackToCatalog: () => void;
 }
-
-const BD_PHONE_REGEX = /^01[3-9][0-9]{8}$/;
 
 function getPasswordChecks(password: string) {
   return {
@@ -21,13 +25,16 @@ function getPasswordChecks(password: string) {
   };
 }
 
-export default function Register({ onRegister, onGoogleLogin, onNavigateLogin, onBackToCatalog }: RegisterProps) {
+export default function Register({ onRegister, onVerifyCode, onResendCode, onGoogleLogin, onNavigateLogin, onBackToCatalog }: RegisterProps) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [serverError, setServerError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState<'form' | 'verify'>('form');
+  const [otp, setOtp] = useState('');
+  const [resendMsg, setResendMsg] = useState('');
 
   const passwordChecks = getPasswordChecks(formData.password);
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
@@ -42,12 +49,12 @@ export default function Register({ onRegister, onGoogleLogin, onNavigateLogin, o
     const errors: { [key: string]: string } = {};
 
     if (!formData.name.trim()) errors.name = 'Full name is required';
-    if (!formData.email.trim() || !/\S+@\S+\.\S+/.test(formData.email)) {
+    if (!formData.email.trim() || !isValidEmail(formData.email)) {
       errors.email = 'A valid email address is required';
     }
     if (!formData.phone.trim()) {
       errors.phone = 'Phone number is required';
-    } else if (!BD_PHONE_REGEX.test(formData.phone.trim())) {
+    } else if (!isValidBdPhone(formData.phone.trim())) {
       errors.phone = 'Enter a valid Bangladeshi number, e.g. 017XXXXXXXX';
     }
     if (!formData.password) {
@@ -75,20 +82,37 @@ export default function Register({ onRegister, onGoogleLogin, onNavigateLogin, o
     }
 
     setIsSubmitting(true);
-    const err = await onRegister({
+    const result = await onRegister({
       name: formData.name.trim(),
       email: formData.email.trim(),
       phone: formData.phone.trim(),
       password: formData.password,
     });
     setIsSubmitting(false);
+    if (result.error) {
+      setServerError(result.error);
+    } else if (result.requiresVerification) {
+      setStep('verify');
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setServerError('');
+    if (otp.trim().length < 4) {
+      setServerError('Enter the code we emailed you');
+      return;
+    }
+    setIsSubmitting(true);
+    const err = await onVerifyCode(formData.email.trim(), otp.trim(), formData.phone.trim());
+    setIsSubmitting(false);
     if (err) setServerError(err);
   };
 
-  const handleGoogle = async (credential: string) => {
-    setServerError('');
-    const err = await onGoogleLogin(credential);
-    if (err) setServerError(err);
+  const handleResend = async () => {
+    setResendMsg('');
+    await onResendCode(formData.email.trim());
+    setResendMsg('A new code has been sent to your email.');
   };
 
   return (
@@ -138,6 +162,60 @@ export default function Register({ onRegister, onGoogleLogin, onNavigateLogin, o
         </button>
 
         <div className="mx-auto w-full max-w-sm">
+          {step === 'verify' ? (
+            <>
+              <h2 className="font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">Check your email</h2>
+              <p className="mt-2 font-sans text-sm text-gray-500">
+                We sent a 6-digit code to <span className="font-semibold text-gray-800">{formData.email}</span>. Enter it below to finish creating your account.
+              </p>
+
+              {serverError && (
+                <div className="mt-6 rounded-xl border border-red-100 bg-red-50 p-3.5 font-sans text-sm text-red-700" id="register-error">
+                  {serverError}
+                </div>
+              )}
+              {resendMsg && (
+                <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 p-3.5 font-sans text-sm text-emerald-700">
+                  {resendMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleVerify} className="mt-6 space-y-4" id="verify-form" noValidate>
+                <div>
+                  <label htmlFor="otp" className="mb-1.5 block font-sans text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    id="otp"
+                    inputMode="numeric"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    className="w-full rounded-lg border border-gray-200 py-3 text-center text-lg font-mono tracking-[0.5em] focus:border-[#1E2D44] focus:outline-none focus:ring-1 focus:ring-[#1E2D44]"
+                    placeholder="000000"
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full rounded-xl bg-[#1E2D44] py-3.5 font-sans text-sm font-semibold text-white shadow-md transition-all hover:bg-[#16233a] active:scale-[0.99] disabled:opacity-60"
+                >
+                  {isSubmitting ? 'Verifying…' : 'Verify & Create Account'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  className="w-full text-center font-sans text-sm font-medium text-[#B88E4C] hover:underline"
+                >
+                  Resend code
+                </button>
+              </form>
+            </>
+          ) : (
+          <>
           <h2 className="font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">Create your account</h2>
           <p className="mt-2 font-sans text-sm text-gray-500">
             Already have an account?{' '}
@@ -319,7 +397,9 @@ export default function Register({ onRegister, onGoogleLogin, onNavigateLogin, o
             <div className="h-px flex-1 bg-gray-100" />
           </div>
 
-          <GoogleAuthButton text="signup_with" onCredential={handleGoogle} />
+          <GoogleAuthButton label="Sign up with Google" onClick={onGoogleLogin} />
+          </>
+          )}
         </div>
       </div>
     </div>

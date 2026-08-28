@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Product, Order, Customer, CartItem, ViewType, PromoCode, ShippingSettings, User } from './types';
-import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_ORDERS } from './data';
+import { Product, Order, Customer, Account, CartItem, ViewType, PromoCode, ShippingSettings, User } from './types';
 import Navbar from './components/Navbar';
 import CatalogView from './components/CatalogView';
 import CartDrawer from './components/CartDrawer';
@@ -10,246 +9,222 @@ import ProductDetailView from './components/ProductDetailView';
 import Login from './components/Login';
 import Register from './components/Register';
 import Logo from './components/Logo';
+import MyOrdersView from './components/MyOrdersView';
 import { Mail, Phone, MapPin, Heart, ShieldCheck } from 'lucide-react';
+import { fetchProducts, createProduct, updateProduct, deleteProduct } from './lib/api/products';
+import { fetchOrders, fetchMyOrders, updateOrderStatus, cancelOwnOrder, placeCodOrder, createGatewayOrder, initiateSslcommerzPayment, getOrderById } from './lib/api/orders';
+import { SslcommerzDeliveryDetails } from './lib/api/orders';
+import { fetchCustomers, updateCustomerStatus } from './lib/api/customers';
+import { fetchAccounts } from './lib/api/accounts';
+import { fetchPromoCodes, createPromoCode, deletePromoCode, validatePromo } from './lib/api/promoCodes';
+import { fetchShippingSettings, updateShippingSettings } from './lib/api/shippingSettings';
+import {
+  getCurrentUser,
+  signIn,
+  signUp,
+  verifySignUpCode,
+  resendSignUpCode,
+  syncMyProfile,
+  signInWithGoogle,
+  signOut,
+} from './lib/api/auth';
+import { computeSubtotal } from './lib/pricing';
 
-const API_BASE = '/api';
+interface AppliedPromo {
+  code: string;
+  discount: number;
+}
 
 export default function App() {
   // --------------------------------------------------------
-  // CENTRAL PERSISTENCE (PHP API BACKED STATE)
+  // STOREFRONT DATA (InsForge-backed)
   // --------------------------------------------------------
-  const [products, setProducts] = useState<Product[]>(() => {
-    const local = localStorage.getItem('aura_products');
-    return local ? JSON.parse(local) : INITIAL_PRODUCTS;
-  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [myOrdersLoading, setMyOrdersLoading] = useState(false);
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({ shipping_fee: 10, free_shipping_threshold: 150 });
 
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const local = localStorage.getItem('aura_orders');
-    return local ? JSON.parse(local) : INITIAL_ORDERS;
-  });
-
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const local = localStorage.getItem('aura_customers');
-    return local ? JSON.parse(local) : INITIAL_CUSTOMERS;
-  });
-
+  // Cart is genuinely local, pre-checkout state — the only thing still kept in localStorage.
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const local = localStorage.getItem('aura_cart');
-    return local ? JSON.parse(local) : [];
+    try {
+      const local = localStorage.getItem('aura_cart');
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [currentView, setCurrentView] = useState<ViewType>('catalog');
   const [cartOpen, setCartOpen] = useState(false);
-  const [appliedPromo, setAppliedPromo] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [promoError, setPromoError] = useState('');
   const [sslCompletedOrder, setSslCompletedOrder] = useState<Order | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
-  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({ shipping_fee: 10, free_shipping_threshold: 150 });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   // --------------------------------------------------------
-  // FETCH INITIAL DATA FROM PHP API
+  // INITIAL STOREFRONT DATA
   // --------------------------------------------------------
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_BASE}/products.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
-      fetch(`${API_BASE}/orders.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
-      fetch(`${API_BASE}/customers.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
-      fetch(`${API_BASE}/promo_codes.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
-      fetch(`${API_BASE}/shipping_settings.php`).then(r => r.ok ? r.json() : Promise.resolve(null)),
-    ])
-      .then(([apiProducts, apiOrders, apiCustomers, apiPromos, apiShipping]) => {
-        if (apiProducts) setProducts(apiProducts);
-        if (apiOrders) setOrders(apiOrders);
-        if (apiCustomers) setCustomers(apiCustomers);
-        if (apiPromos) setPromoCodes(apiPromos);
-        if (apiShipping) setShippingSettings(apiShipping);
+    Promise.all([fetchProducts(), fetchShippingSettings()])
+      .then(([p, s]) => {
+        setProducts(p);
+        setShippingSettings(s);
       })
-      .catch(err => console.warn('Could not fetch from PHP API, using local data:', err));
+      .catch((err) => console.warn('Could not load storefront data:', err));
   }, []);
 
   // --------------------------------------------------------
-  // RESTORE AUTH SESSION
+  // AUTH SESSION RESTORE
   // --------------------------------------------------------
   useEffect(() => {
-    fetch(`${API_BASE}/auth.php?action=me`)
-      .then(r => r.ok ? r.json() : Promise.resolve(null))
-      .then(data => {
-        if (data?.user) setCurrentUser(data.user);
+    getCurrentUser()
+      .then((user) => {
+        setCurrentUser(user);
+        // Covers Google OAuth returns and any session where the directory
+        // row hasn't been synced yet — cheap upsert, safe to run every load.
+        if (user) syncMyProfile(user.name, user.email).catch(() => {});
       })
-      .catch(err => console.warn('Could not restore auth session:', err));
+      .catch(() => setCurrentUser(null))
+      .finally(() => setAuthLoading(false));
   }, []);
+
+  // --------------------------------------------------------
+  // ADMIN-ONLY DATA (orders, customers, promo codes) — loaded once the
+  // signed-in user is confirmed as admin; RLS would deny it to anyone else.
+  // --------------------------------------------------------
+  useEffect(() => {
+    if (!isAdmin) return;
+    Promise.all([fetchOrders(), fetchCustomers(), fetchPromoCodes(), fetchAccounts()])
+      .then(([o, c, p, a]) => {
+        setOrders(o);
+        setCustomers(c);
+        setPromoCodes(p);
+        setAccounts(a);
+      })
+      .catch((err) => console.warn('Could not load admin data:', err));
+  }, [isAdmin]);
 
   // --------------------------------------------------------
   // AUTH CONTROLLERS
   // --------------------------------------------------------
-  const handleLogin = async (identifier: string, password: string): Promise<string | null> => {
-    try {
-      const res = await fetch(`${API_BASE}/auth.php?action=login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) return data.error || 'Could not sign in. Please try again.';
-      setCurrentUser(data.user);
-      setCurrentView('catalog');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return null;
-    } catch {
-      return 'Connection failed. Please check your network and try again.';
-    }
+  const handleLogin = async (email: string, password: string): Promise<string | null> => {
+    const { user, error } = await signIn(email, password);
+    if (error) return error;
+    if (user) syncMyProfile(user.name, user.email).catch(() => {});
+    setCurrentUser(user);
+    setCurrentView('catalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return null;
   };
 
-  const handleRegister = async (formData: { name: string; email: string; phone: string; password: string }): Promise<string | null> => {
-    try {
-      const res = await fetch(`${API_BASE}/auth.php?action=register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      const data = await res.json();
-      if (!res.ok) return data.error || 'Could not create your account. Please try again.';
-      setCurrentUser(data.user);
+  const handleRegister = async (data: { name: string; email: string; phone: string; password: string }) => {
+    const result = await signUp(data.name, data.email, data.password);
+    if (result.error) return { error: result.error, requiresVerification: false };
+    if (result.requiresVerification) return { error: null, requiresVerification: true };
+    if (result.user) {
+      syncMyProfile(result.user.name, result.user.email, data.phone || null).catch(() => {});
+      setCurrentUser(result.user);
       setCurrentView('catalog');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      return null;
-    } catch {
-      return 'Connection failed. Please check your network and try again.';
     }
+    return { error: null, requiresVerification: false };
   };
 
-  const handleGoogleLogin = async (credential: string): Promise<string | null> => {
-    try {
-      const res = await fetch(`${API_BASE}/auth.php?action=google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential }),
-      });
-      const data = await res.json();
-      if (!res.ok) return data.error || 'Google sign-in failed. Please try again.';
-      setCurrentUser(data.user);
-      setCurrentView('catalog');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return null;
-    } catch {
-      return 'Connection failed. Please check your network and try again.';
-    }
+  const handleVerifyCode = async (email: string, otp: string, phone: string): Promise<string | null> => {
+    const { user, error } = await verifySignUpCode(email, otp);
+    if (error) return error;
+    if (user) syncMyProfile(user.name, user.email, phone || null).catch(() => {});
+    setCurrentUser(user);
+    setCurrentView('catalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return null;
   };
 
-  const handleLogout = () => {
-    fetch(`${API_BASE}/auth.php?action=logout`, { method: 'POST' }).catch(() => {});
+  const handleResendCode = async (email: string) => {
+    await resendSignUpCode(email);
+  };
+
+  const handleGoogleLogin = () => {
+    signInWithGoogle(window.location.origin + window.location.pathname).catch((err) => {
+      console.error('Google sign-in failed:', err);
+    });
+  };
+
+  const handleLogout = async () => {
+    await signOut().catch(() => {});
     setCurrentUser(null);
     setCurrentView('catalog');
   };
 
-  // SSLCommerz payment callback detection & local state synchronization
+  // --------------------------------------------------------
+  // SSLCommerz return-URL handling (the tab the user lands back in after
+  // clicking "Go Back to Store" on the gateway callback page). The order
+  // itself was already created and fulfilled server-side exactly once —
+  // this only reads status and reflects it locally.
+  // --------------------------------------------------------
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sslStatus = params.get('ssl_status');
     const tranId = params.get('tran_id');
 
     if (sslStatus === 'success' && tranId) {
-      console.log(`Successful SSLCommerz transaction detected: ${tranId}. Synchronizing state...`);
-      
-      fetch(`${API_BASE}/sslcommerz/order.php?tran_id=${tranId}`)
-        .then((res) => {
-          if (!res.ok) throw new Error('Order details not found on server');
-          return res.json();
-        })
-        .then((serverOrder: Order) => {
-          // Check if this order has already been added to client state
-          setOrders((prevOrders) => {
-            const alreadyProcessed = prevOrders.some((o) => o.id === serverOrder.id);
-            if (alreadyProcessed) return prevOrders;
-            return [serverOrder, ...prevOrders];
-          });
-
-          // Decrement products inventory stock
-          setProducts((prevProducts) =>
-            prevProducts.map((p) => {
-              const boughtItem = serverOrder.items.find((item) => item.productId === p.id);
-              if (boughtItem) {
-                const nextStock = Math.max(p.inventory - boughtItem.quantity, 0);
-                return {
-                  ...p,
-                  inventory: nextStock,
-                  status: nextStock === 0 ? 'Out of Stock' : p.status,
-                };
-              }
-              return p;
-            })
-          );
-
-          // Update customers list CRM metric
-          setCustomers((prevCustomers) => {
-            const match = prevCustomers.find(
-              (c) => c.email.toLowerCase() === serverOrder.customerEmail.toLowerCase()
-            );
-
-            if (match) {
-              return prevCustomers.map((c) =>
-                c.email.toLowerCase() === serverOrder.customerEmail.toLowerCase()
-                  ? {
-                      ...c,
-                      totalOrders: c.totalOrders + 1,
-                      totalSpent: c.totalSpent + serverOrder.total,
-                    }
-                  : c
-              );
-            } else {
-              const newCustID = `cust-${prevCustomers.length + 1}`;
-              const newCust: Customer = {
-                id: newCustID,
-                name: serverOrder.customerName,
-                email: serverOrder.customerEmail,
-                joinDate: new Date().toISOString().split('T')[0],
-                totalOrders: 1,
-                totalSpent: serverOrder.total,
-                status: 'Active',
-              };
-              return [...prevCustomers, newCust];
-            }
-          });
-
-          // Purge shopping cart and promo code
-          setCart([]);
-          setAppliedPromo('');
-
-          // Show the order receipt screen by setting view to checkout and storing order details
-          setSslCompletedOrder(serverOrder);
+      getOrderById(tranId)
+        .then((order) => {
+          if (!order) return;
+          setSslCompletedOrder(order);
           setCurrentView('checkout');
-
-          // Clean up the URL query parameters so reloading doesn't execute synchronization again
+          setCart([]);
+          setAppliedPromo(null);
+          if (order.paymentStatus === 'paid') {
+            setProducts((prev) =>
+              prev.map((p) => {
+                const bought = order.items.find((item) => item.productId === p.id);
+                if (!bought) return p;
+                const nextStock = Math.max(p.inventory - bought.quantity, 0);
+                return { ...p, inventory: nextStock, status: nextStock === 0 ? 'Out of Stock' : p.status };
+              })
+            );
+          }
           window.history.replaceState({}, document.title, window.location.pathname);
         })
-        .catch((err) => {
-          console.error('Error fetching SSLCommerz completed order:', err);
-        });
+        .catch((err) => console.error('Error fetching SSLCommerz completed order:', err));
     } else if ((sslStatus === 'fail' || sslStatus === 'cancel') && tranId) {
-      console.warn(`SSLCommerz payment failed or cancelled. Status: ${sslStatus}, Tran ID: ${tranId}`);
       setCurrentView('checkout');
-      // Clean up URL query parameters
       window.history.replaceState({}, document.title, window.location.pathname);
       alert(`SSLCommerz payment was ${sslStatus === 'fail' ? 'failed' : 'cancelled'}. Please try again.`);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync state to local storage whenever they change
-  useEffect(() => {
-    localStorage.setItem('aura_products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('aura_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('aura_customers', JSON.stringify(customers));
-  }, [customers]);
-
+  // Persist cart only
   useEffect(() => {
     localStorage.setItem('aura_cart', JSON.stringify(cart));
+  }, [cart]);
+
+  // Keep the applied promo's discount accurate as the cart changes (min-order
+  // thresholds, etc.) — the order RPCs remain the actual authority at checkout.
+  useEffect(() => {
+    if (!appliedPromo) return;
+    const subtotal = computeSubtotal(cart);
+    validatePromo(appliedPromo.code, subtotal)
+      .then((result) => {
+        if (!result.valid) {
+          setAppliedPromo(null);
+          setPromoError(result.error || 'This promo code no longer applies to your order.');
+        } else if (result.discount !== appliedPromo.discount) {
+          setAppliedPromo({ code: result.code || appliedPromo.code, discount: result.discount });
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart]);
 
   // --------------------------------------------------------
@@ -257,8 +232,6 @@ export default function App() {
   // --------------------------------------------------------
   const handleAddToCart = (product: Product) => {
     const existing = cart.find((item) => item.product.id === product.id);
-    
-    // Check stock limit
     const currentQtyInCart = existing ? existing.quantity : 0;
     if (currentQtyInCart >= product.inventory) {
       alert(`Cannot add more. We only have ${product.inventory} units of ${product.name} in stock.`);
@@ -266,38 +239,24 @@ export default function App() {
     }
 
     if (existing) {
-      setCart(
-        cart.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        )
-      );
+      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)));
     } else {
       setCart([...cart, { product, quantity: 1 }]);
     }
-
-    // Auto-open drawer for premium feedback loop
     setCartOpen(true);
   };
 
   const handleAddToCartWithQty = (product: Product, quantity: number) => {
     const existing = cart.find((item) => item.product.id === product.id);
     const currentQtyInCart = existing ? existing.quantity : 0;
-    
+
     if (currentQtyInCart + quantity > product.inventory) {
       alert(`Cannot add more. We only have ${product.inventory} units of ${product.name} in stock, and you already have ${currentQtyInCart} in your cart.`);
       return;
     }
 
     if (existing) {
-      setCart(
-        cart.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        )
-      );
+      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity: item.quantity + quantity } : item)));
     } else {
       setCart([...cart, { product, quantity }]);
     }
@@ -312,17 +271,11 @@ export default function App() {
 
     const existing = cart.find((item) => item.product.id === product.id);
     if (existing) {
-      setCart(
-        cart.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: quantity }
-            : item
-        )
-      );
+      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity } : item)));
     } else {
       setCart([...cart, { product, quantity }]);
     }
-    
+
     setCurrentView('checkout');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -332,206 +285,151 @@ export default function App() {
       handleRemoveItem(productId);
       return;
     }
-
     const prod = products.find((p) => p.id === productId);
     if (prod && quantity > prod.inventory) {
       alert(`Sorry, only ${prod.inventory} units are available.`);
       return;
     }
-
-    setCart(
-      cart.map((item) =>
-        item.product.id === productId ? { ...item, quantity } : item
-      )
-    );
+    setCart(cart.map((item) => (item.product.id === productId ? { ...item, quantity } : item)));
   };
 
   const handleRemoveItem = (productId: string) => {
     setCart(cart.filter((item) => item.product.id !== productId));
   };
 
-  const handleApplyPromo = (code: string) => {
-    setAppliedPromo(code);
+  const handleApplyPromo = async (code: string) => {
+    setPromoError('');
+    try {
+      const result = await validatePromo(code, computeSubtotal(cart));
+      if (!result.valid) {
+        setPromoError(result.error || 'Invalid promo code');
+        return;
+      }
+      setAppliedPromo({ code: result.code || code.trim().toUpperCase(), discount: result.discount });
+    } catch (err) {
+      setPromoError(err instanceof Error ? err.message : 'Could not validate this promo code.');
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoError('');
   };
 
   // --------------------------------------------------------
-  // SECURE CHECKOUT FLOW (ORDER PLACEMENT)
+  // CHECKOUT — server-side, atomic, price-authoritative
   // --------------------------------------------------------
-  const handlePlaceOrder = (checkoutData: {
+  const handlePlaceCodOrder = async (data: { customerName: string; customerEmail: string; shippingAddress: string }): Promise<Order> => {
+    const order = await placeCodOrder(cart, data.customerName, data.customerEmail, data.shippingAddress, appliedPromo?.code ?? null);
+    applyLocalFulfillment(order);
+    return order;
+  };
+
+  const handleInitiateGatewayOrder = async (data: {
     customerName: string;
     customerEmail: string;
     shippingAddress: string;
-    paymentMethod: string;
-  }): Order => {
-    const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-    
-    // Compute discount from applied promo
-    let discount = 0;
-    if (appliedPromo) {
-      const promo = promoCodes.find(p => p.code === appliedPromo && p.is_active);
-      if (promo) {
-        if (promo.type === 'percentage') {
-          discount = subtotal * (promo.value / 100);
-        } else {
-          discount = promo.value;
-        }
-      }
+    delivery: SslcommerzDeliveryDetails;
+  }): Promise<{ order: Order; redirectUrl: string }> => {
+    const order = await createGatewayOrder(cart, data.customerName, data.customerEmail, data.shippingAddress, appliedPromo?.code ?? null);
+    const redirectUrl = await initiateSslcommerzPayment(order.id, data.delivery);
+    return { order, redirectUrl };
+  };
+
+  const handleGetOrderStatus = async (orderId: string): Promise<Order | null> => {
+    const order = await getOrderById(orderId);
+    if (order && order.paymentStatus === 'paid') {
+      applyLocalFulfillment(order);
     }
+    return order;
+  };
 
-    const { free_shipping_threshold, shipping_fee } = shippingSettings;
-    const isFreeShipping = subtotal >= free_shipping_threshold;
-    const shippingFee = isFreeShipping ? 0 : shipping_fee;
-    const total = subtotal - discount + shippingFee;
-
-    // 1. Create a beautiful random Order ID
-    const randomID = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const newOrder: Order = {
-      id: randomID,
-      customerName: checkoutData.customerName,
-      customerEmail: checkoutData.customerEmail,
-      shippingAddress: checkoutData.shippingAddress,
-      items: cart.map((item) => ({
-        productId: item.product.id,
-        name: item.product.name,
-        price: item.product.price,
-        quantity: item.quantity,
-        image: item.product.image,
-      })),
-      subtotal,
-      discount,
-      total,
-      status: 'Pending',
-      createdAt: new Date().toISOString(),
-      paymentMethod: checkoutData.paymentMethod,
-    };
-
-    // 2. Decrement inventory stock on products
-    setProducts((prevProducts) =>
-      prevProducts.map((p) => {
-        const boughtItem = cart.find((item) => item.product.id === p.id);
-        if (boughtItem) {
-          const nextStock = Math.max(p.inventory - boughtItem.quantity, 0);
-          return {
-            ...p,
-            inventory: nextStock,
-            status: nextStock === 0 ? 'Out of Stock' : p.status,
-          };
-        }
-        return p;
+  // Reflect a fulfilled order's effects (inventory, admin order log) in local
+  // state without a full refetch — the server rows are already authoritative.
+  const applyLocalFulfillment = (order: Order) => {
+    setProducts((prev) =>
+      prev.map((p) => {
+        const bought = order.items.find((item) => item.productId === p.id);
+        if (!bought) return p;
+        const nextStock = Math.max(p.inventory - bought.quantity, 0);
+        return { ...p, inventory: nextStock, status: nextStock === 0 ? 'Out of Stock' : p.status };
       })
     );
-
-    // 3. Update customer CRM metrics or create a new one
-    setCustomers((prevCustomers) => {
-      const match = prevCustomers.find(
-        (c) => c.email.toLowerCase() === checkoutData.customerEmail.toLowerCase()
-      );
-
-      if (match) {
-        return prevCustomers.map((c) =>
-          c.email.toLowerCase() === checkoutData.customerEmail.toLowerCase()
-            ? {
-                ...c,
-                totalOrders: c.totalOrders + 1,
-                totalSpent: c.totalSpent + total,
-              }
-            : c
-        );
-      } else {
-        const newCustID = `cust-${prevCustomers.length + 1}`;
-        const newCust: Customer = {
-          id: newCustID,
-          name: checkoutData.customerName,
-          email: checkoutData.customerEmail,
-          joinDate: new Date().toISOString().split('T')[0],
-          totalOrders: 1,
-          totalSpent: total,
-          status: 'Active',
-        };
-        return [...prevCustomers, newCust];
-      }
-    });
-
-    // 4. Save order to main orders feed
-    setOrders((prevOrders) => [newOrder, ...prevOrders]);
-
-    // 5. Persist order to PHP API
-    fetch(`${API_BASE}/orders.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...newOrder,
-        items: newOrder.items.map(item => ({
-          productId: item.productId,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          image: item.image,
-        })),
-      }),
-    }).catch(err => console.warn('Failed to persist order to API:', err));
-
-    // 6. Purge shopping cart and promo code
-    setCart([]);
-    setAppliedPromo('');
-
-    return newOrder;
+    if (isAdmin) {
+      setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev.map((o) => (o.id === order.id ? order : o)) : [order, ...prev]));
+    }
   };
 
   // --------------------------------------------------------
-  // ADMIN BOARD CONTROLLERS (CRUD LOGIC)
+  // MY ORDERS (account order history + self-service cancellation)
   // --------------------------------------------------------
-  const handleAddProduct = (newProdData: Omit<Product, 'id'>) => {
-    const nextId = `prod-${products.length + 1}`;
-    const product: Product = {
-      ...newProdData,
-      id: nextId,
-    };
-    setProducts([...products, product]);
-    fetch(`${API_BASE}/products.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product),
-    }).catch(err => console.warn('Failed to sync product to API:', err));
-  };
+  useEffect(() => {
+    if (currentView !== 'my-orders' || !currentUser) return;
+    setMyOrdersLoading(true);
+    fetchMyOrders(currentUser.id)
+      .then(setMyOrders)
+      .catch((err) => console.warn('Could not load your orders:', err))
+      .finally(() => setMyOrdersLoading(false));
+  }, [currentView, currentUser]);
 
-  const handleUpdateProduct = (updatedProd: Product) => {
-    setProducts(products.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
-    fetch(`${API_BASE}/products.php`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedProd),
-    }).catch(err => console.warn('Failed to sync product update to API:', err));
-  };
-
-  const handleDeleteProduct = (productId: string) => {
-    setProducts(products.filter((p) => p.id !== productId));
-    fetch(`${API_BASE}/products.php?id=${productId}`, {
-      method: 'DELETE',
-    }).catch(err => console.warn('Failed to sync product delete to API:', err));
-  };
-
-  const handleUpdateOrderStatus = (orderId: string, status: Order['status']) => {
-    setOrders(
-      orders.map((o) => (o.id === orderId ? { ...o, status } : o))
+  const handleCancelOrder = async (orderId: string) => {
+    const cancelled = await cancelOwnOrder(orderId);
+    setMyOrders((prev) => prev.map((o) => (o.id === orderId ? cancelled : o)));
+    // The server already restored inventory/CRM counters — reflect the
+    // inventory side locally so the catalog doesn't look stale.
+    setProducts((prev) =>
+      prev.map((p) => {
+        const returned = cancelled.items.find((item) => item.productId === p.id);
+        if (!returned) return p;
+        return { ...p, inventory: p.inventory + returned.quantity, status: 'Active' };
+      })
     );
-    fetch(`${API_BASE}/orders.php`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: orderId, status }),
-    }).catch(err => console.warn('Failed to sync order status to API:', err));
+    if (isAdmin) {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? cancelled : o)));
+    }
   };
 
-  const handleUpdateCustomerStatus = (customerId: string, status: Customer['status']) => {
-    setCustomers(
-      customers.map((c) => (c.id === customerId ? { ...c, status } : c))
-    );
-    fetch(`${API_BASE}/customers.php`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: customerId, status }),
-    }).catch(err => console.warn('Failed to sync customer status to API:', err));
+  // --------------------------------------------------------
+  // ADMIN BOARD CONTROLLERS (CRUD)
+  // --------------------------------------------------------
+  const handleAddProduct = async (newProdData: Omit<Product, 'id'>) => {
+    const created = await createProduct(newProdData);
+    setProducts((prev) => [created, ...prev]);
+  };
+
+  const handleUpdateProduct = async (updatedProd: Product) => {
+    const saved = await updateProduct(updatedProd);
+    setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    await deleteProduct(productId);
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
+    await updateOrderStatus(orderId, status);
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
+  };
+
+  const handleUpdateCustomerStatus = async (customerId: string, status: Customer['status']) => {
+    await updateCustomerStatus(customerId, status);
+    setCustomers((prev) => prev.map((c) => (c.id === customerId ? { ...c, status } : c)));
+  };
+
+  const handleAddPromoCode = async (promo: Omit<PromoCode, 'id' | 'used_count' | 'created_at'>) => {
+    const created = await createPromoCode(promo);
+    setPromoCodes((prev) => [created, ...prev]);
+  };
+
+  const handleDeletePromoCode = async (id: string) => {
+    await deletePromoCode(id);
+    setPromoCodes((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleUpdateShippingSettings = async (settings: ShippingSettings) => {
+    await updateShippingSettings(settings);
+    setShippingSettings(settings);
   };
 
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -554,9 +452,9 @@ export default function App() {
       {/* Main Screen Router */}
       <main className="flex-grow">
         {currentView === 'catalog' && (
-          <CatalogView 
-            products={products} 
-            onAddToCart={handleAddToCart} 
+          <CatalogView
+            products={products}
+            onAddToCart={handleAddToCart}
             onSelectProduct={(p) => {
               setSelectedProduct(p);
               setCurrentView('product-detail');
@@ -583,16 +481,19 @@ export default function App() {
           <CheckoutView
             cart={cart}
             appliedPromo={appliedPromo}
-            promoCodes={promoCodes}
             shippingSettings={shippingSettings}
-            onPlaceOrder={handlePlaceOrder}
+            isAdmin={isAdmin}
+            onPlaceCodOrder={handlePlaceCodOrder}
+            onInitiateGatewayOrder={handleInitiateGatewayOrder}
+            onGetOrderStatus={handleGetOrderStatus}
             onBackToCatalog={() => setCurrentView('catalog')}
             onClearCart={() => setCart([])}
+            onNavigateAdminOrders={() => setCurrentView('admin')}
             initialOrder={sslCompletedOrder}
           />
         )}
 
-        {currentView === 'login' && (
+        {currentView === 'login' && !authLoading && (
           <Login
             onLogin={handleLogin}
             onGoogleLogin={handleGoogleLogin}
@@ -601,27 +502,42 @@ export default function App() {
           />
         )}
 
-        {currentView === 'register' && (
+        {currentView === 'register' && !authLoading && (
           <Register
             onRegister={handleRegister}
+            onVerifyCode={handleVerifyCode}
+            onResendCode={handleResendCode}
             onGoogleLogin={handleGoogleLogin}
             onNavigateLogin={() => setCurrentView('login')}
             onBackToCatalog={() => setCurrentView('catalog')}
           />
         )}
 
-        {currentView === 'admin' && (
+        {currentView === 'my-orders' && currentUser && (
+          <MyOrdersView
+            orders={myOrders}
+            loading={myOrdersLoading}
+            onCancelOrder={handleCancelOrder}
+            onBackToCatalog={() => setCurrentView('catalog')}
+          />
+        )}
+
+        {currentView === 'admin' && isAdmin && (
           <AdminDashboard
             products={products}
             orders={orders}
             customers={customers}
+            accounts={accounts}
+            promoCodes={promoCodes}
+            shippingSettings={shippingSettings}
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
             onDeleteProduct={handleDeleteProduct}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onUpdateCustomerStatus={handleUpdateCustomerStatus}
-            onShippingSettingsChange={setShippingSettings}
-            onPromoCodesChange={setPromoCodes}
+            onAddPromoCode={handleAddPromoCode}
+            onDeletePromoCode={handleDeletePromoCode}
+            onUpdateShippingSettings={handleUpdateShippingSettings}
           />
         )}
       </main>
@@ -727,7 +643,7 @@ export default function App() {
             <div className="flex items-center space-x-4">
               <span className="hover:text-gray-600 transition-colors cursor-pointer">Privacy Policy</span>
               <span>•</span>
-              <span className="hover:text-gray-600 transition-colors cursor-pointer">Terms of Service</span>git 
+              <span className="hover:text-gray-600 transition-colors cursor-pointer">Terms of Service</span>
             </div>
           </div>
         </div>
@@ -746,8 +662,9 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         appliedPromo={appliedPromo}
+        promoError={promoError}
         onApplyPromo={handleApplyPromo}
-        promoCodes={promoCodes}
+        onRemovePromo={handleRemovePromo}
         shippingSettings={shippingSettings}
       />
     </div>

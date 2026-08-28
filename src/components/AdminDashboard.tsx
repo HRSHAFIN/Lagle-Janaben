@@ -1,38 +1,315 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  TrendingUp, ShoppingCart, Users, Package, Search, Plus, 
-  Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2, 
-  Clock, Ship, Ban, AlertTriangle, RefreshCw, Percent, Truck, Image, GripVertical
+import {
+  TrendingUp, ShoppingCart, Users, Package, Search, Plus,
+  Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2,
+  AlertTriangle, Percent, Truck, Image, GripVertical, UserCog, ShieldCheck
 } from 'lucide-react';
-import { Product, Order, Customer, AdminTabType, PromoCode, ShippingSettings, HeroSlide } from '../types';
+import { Product, Order, Customer, Account, AdminTabType, PromoCode, ShippingSettings, HeroSlide } from '../types';
 import { CATEGORIES } from '../data';
+import { fetchHeroSlides, uploadHeroImage, createHeroSlide, updateHeroSlide, deleteHeroSlide } from '../lib/api/heroSlides';
 
-const API_BASE = '/api';
+function shortId(id: string): string {
+  return `#${id.slice(0, 8).toUpperCase()}`;
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
+const CATEGORY_IMAGE_FALLBACK: Record<string, string> = {
+  Technology: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+  Accessories: 'https://images.unsplash.com/photo-1524498250077-390f9e378fc0?auto=format&fit=crop&w=600&q=80',
+  Lifestyle: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&q=80',
+  Apparel: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80',
+};
+const DEFAULT_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?auto=format&fit=crop&w=600&q=80';
 
 interface AdminDashboardProps {
   products: Product[];
   orders: Order[];
   customers: Customer[];
-  onAddProduct: (product: Omit<Product, 'id'>) => void;
-  onUpdateProduct: (product: Product) => void;
-  onDeleteProduct: (productId: string) => void;
-  onUpdateOrderStatus: (orderId: string, status: Order['status']) => void;
-  onUpdateCustomerStatus: (customerId: string, status: Customer['status']) => void;
-  onShippingSettingsChange?: (settings: ShippingSettings) => void;
-  onPromoCodesChange?: (codes: PromoCode[]) => void;
+  accounts: Account[];
+  promoCodes: PromoCode[];
+  shippingSettings: ShippingSettings;
+  onAddProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  onUpdateProduct: (product: Product) => Promise<void>;
+  onDeleteProduct: (productId: string) => Promise<void>;
+  onUpdateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
+  onUpdateCustomerStatus: (customerId: string, status: Customer['status']) => Promise<void>;
+  onAddPromoCode: (promo: Omit<PromoCode, 'id' | 'used_count' | 'created_at'>) => Promise<void>;
+  onDeletePromoCode: (id: string) => Promise<void>;
+  onUpdateShippingSettings: (settings: ShippingSettings) => Promise<void>;
+}
+
+// Module-scope so it doesn't remount (and lose its form state) every time
+// AdminDashboard re-renders for an unrelated reason.
+function HeroSliderTab() {
+  const [slides, setSlides] = useState<HeroSlide[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null);
+  const [form, setForm] = useState({ image_url: '', alt_text: '', sort_order: '' });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadSlides = async () => {
+    try {
+      setSlides(await fetchHeroSlides());
+    } catch (err) {
+      setError(errorMessage(err, 'Could not load hero slides.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSlides();
+  }, []);
+
+  const resetForm = () => {
+    setForm({ image_url: '', alt_text: '', sort_order: '' });
+    setSelectedFile(null);
+    setEditingSlide(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!selectedFile && !form.image_url.trim() && !editingSlide) {
+      setError('Choose a file to upload or paste an image URL.');
+      return;
+    }
+    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
+      setError('Image must be smaller than 5MB.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      let imageUrl = editingSlide?.image_url ?? '';
+      let imageKey: string | null = editingSlide?.image_key ?? null;
+
+      if (selectedFile) {
+        const uploaded = await uploadHeroImage(selectedFile);
+        imageUrl = uploaded.url;
+        imageKey = uploaded.key;
+      } else if (form.image_url.trim()) {
+        imageUrl = form.image_url.trim();
+        imageKey = null;
+      }
+
+      const sortOrder = form.sort_order ? parseInt(form.sort_order, 10) : slides.length;
+
+      if (editingSlide) {
+        await updateHeroSlide(editingSlide.id, {
+          image_url: imageUrl,
+          image_key: imageKey,
+          alt_text: form.alt_text.trim(),
+          sort_order: Number.isFinite(sortOrder) ? sortOrder : editingSlide.sort_order,
+        });
+      } else {
+        await createHeroSlide({
+          image_url: imageUrl,
+          image_key: imageKey,
+          alt_text: form.alt_text.trim(),
+          sort_order: Number.isFinite(sortOrder) ? sortOrder : slides.length,
+          is_active: true,
+        });
+      }
+
+      resetForm();
+      await loadSlides();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save this slide.'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleEdit = (slide: HeroSlide) => {
+    setForm({ image_url: slide.image_url, alt_text: slide.alt_text, sort_order: String(slide.sort_order) });
+    setSelectedFile(null);
+    setEditingSlide(slide);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (slide: HeroSlide) => {
+    if (!confirm('Delete this slide?')) return;
+    setError('');
+    try {
+      await deleteHeroSlide(slide);
+      await loadSlides();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not delete this slide.'));
+    }
+  };
+
+  const handleToggleActive = async (slide: HeroSlide) => {
+    setError('');
+    try {
+      await updateHeroSlide(slide.id, { is_active: !slide.is_active });
+      await loadSlides();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not update this slide.'));
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-150 text-left" id="hero-slider-pane">
+      <div className="flex items-center justify-between">
+        <h3 className="font-sans text-lg font-bold text-gray-900">Hero Slider Images</h3>
+        <button
+          onClick={() => {
+            resetForm();
+            setShowForm((v) => !v);
+          }}
+          className="flex items-center space-x-1.5 rounded-xl bg-gray-900 px-4 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800"
+        >
+          <Plus className="h-4 w-4" />
+          <span>{showForm ? 'Cancel' : 'Add Slide'}</span>
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3.5 text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="max-w-lg rounded-2xl border border-gray-100 bg-white p-6 shadow-sm space-y-4">
+          <div className="border-b border-gray-100 pb-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Upload from PC</p>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              onChange={(e) => {
+                setSelectedFile(e.target.files?.[0] || null);
+                setForm({ ...form, image_url: '' });
+              }}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gray-900 file:text-white file:font-semibold file:text-sm hover:file:bg-gray-800"
+            />
+            {selectedFile && <p className="mt-1 text-xs text-emerald-600">{selectedFile.name}</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 border-t border-gray-200" />
+            <span className="text-xs text-gray-400 font-semibold">OR</span>
+            <div className="flex-1 border-t border-gray-200" />
+          </div>
+          <div>
+            <label htmlFor="slide-image-url" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Image URL</label>
+            <input
+              id="slide-image-url"
+              type="text"
+              value={form.image_url}
+              onChange={(e) => {
+                setForm({ ...form, image_url: e.target.value });
+                setSelectedFile(null);
+              }}
+              placeholder="https://example.com/image.jpg"
+              className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label htmlFor="slide-alt-text" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Alt Text</label>
+            <input
+              id="slide-alt-text"
+              type="text"
+              value={form.alt_text}
+              onChange={(e) => setForm({ ...form, alt_text: e.target.value })}
+              placeholder="Describe the slide"
+              className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label htmlFor="slide-sort-order" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Sort Order</label>
+            <input
+              id="slide-sort-order"
+              type="number"
+              min="0"
+              value={form.sort_order}
+              onChange={(e) => setForm({ ...form, sort_order: e.target.value })}
+              className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={uploading}
+            className="rounded-xl bg-gray-900 px-6 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {uploading ? 'Saving...' : editingSlide ? 'Update Slide' : 'Add Slide'}
+          </button>
+        </form>
+      )}
+
+      <div className="space-y-3">
+        {loading && <p className="text-sm text-gray-400">Loading slides…</p>}
+        {!loading &&
+          slides.map((slide, idx) => (
+            <div key={slide.id} className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <GripVertical className="h-5 w-5 text-gray-300 flex-shrink-0" />
+              <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                <img
+                  src={slide.image_url}
+                  alt={slide.alt_text}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://placehold.co/200x150?text=No+Image';
+                  }}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{slide.alt_text || `Slide ${idx + 1}`}</p>
+                <p className="text-xs text-gray-400 truncate">{slide.image_url}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleToggleActive(slide)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                    slide.is_active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                  }`}
+                >
+                  {slide.is_active ? 'Active' : 'Inactive'}
+                </button>
+                <button onClick={() => handleEdit(slide)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600">
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button onClick={() => handleDelete(slide)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        {!loading && slides.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-gray-200 p-10 text-center">
+            <Image className="mx-auto h-8 w-8 text-gray-300" />
+            <p className="mt-2 text-sm text-gray-400">No slides yet. Add your first hero slider image.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminDashboard({
   products,
   orders,
   customers,
+  accounts,
+  promoCodes,
+  shippingSettings,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
   onUpdateOrderStatus,
   onUpdateCustomerStatus,
-  onShippingSettingsChange,
-  onPromoCodesChange,
+  onAddPromoCode,
+  onDeletePromoCode,
+  onUpdateShippingSettings,
 }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<AdminTabType>('overview');
 
@@ -40,6 +317,8 @@ export default function AdminDashboard({
   const [productSearch, setProductSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productFormError, setProductFormError] = useState('');
+  const [editFormError, setEditFormError] = useState('');
 
   // New product form state
   const [newProduct, setNewProduct] = useState({
@@ -61,333 +340,190 @@ export default function AdminDashboard({
   // Customers tab states
   const [customerSearch, setCustomerSearch] = useState('');
 
+  // Accounts tab states
+  const [accountSearch, setAccountSearch] = useState('');
+
   // Promo codes tab states
-  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [showAddPromo, setShowAddPromo] = useState(false);
-  const [promoForm, setPromoForm] = useState({ code: '', type: 'percentage', value: '', usage_limit: '', min_order_amount: '' });
+  const [promoForm, setPromoForm] = useState({ code: '', type: 'percentage' as PromoCode['type'], value: '', usage_limit: '', min_order_amount: '' });
+  const [promoFormError, setPromoFormError] = useState('');
 
   // Shipping settings tab
-  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>({ shipping_fee: 10, free_shipping_threshold: 150 });
+  const [shippingDraft, setShippingDraft] = useState<ShippingSettings>(shippingSettings);
   const [shippingSaved, setShippingSaved] = useState(false);
+  const [shippingError, setShippingError] = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/promo_codes.php`)
-      .then(r => r.ok ? r.json() : [])
-      .then(d => Array.isArray(d) && setPromoCodes(d))
-      .catch(() => {});
-    fetch(`${API_BASE}/shipping_settings.php`)
-      .then(r => r.ok ? r.json() : null)
-      .then(s => { if (s && typeof s.shipping_fee === 'number') setShippingSettings(s); })
-      .catch(() => {});
-  }, []);
+    setShippingDraft(shippingSettings);
+  }, [shippingSettings]);
 
-  const handleAddPromoCode = () => {
+  const handleAddPromoCode = async () => {
+    setPromoFormError('');
     const code = promoForm.code.trim().toUpperCase();
     const value = parseFloat(promoForm.value);
-    if (!code || isNaN(value)) return;
-    fetch(`${API_BASE}/promo_codes.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    if (!code || !Number.isFinite(value) || value < 0) {
+      setPromoFormError('Enter a valid code and value.');
+      return;
+    }
+    const usageLimit = promoForm.usage_limit ? parseInt(promoForm.usage_limit, 10) : null;
+    const minOrderAmount = promoForm.min_order_amount ? parseFloat(promoForm.min_order_amount) : null;
+    try {
+      await onAddPromoCode({
         code,
         type: promoForm.type,
         value,
-        usage_limit: promoForm.usage_limit ? parseInt(promoForm.usage_limit) : null,
-        min_order_amount: promoForm.min_order_amount ? parseFloat(promoForm.min_order_amount) : null,
-      }),
-    }).then(r => {
-      if (r.ok) return fetch(`${API_BASE}/promo_codes.php`).then(r => r.json());
-    }).then(updated => {
-      if (Array.isArray(updated)) {
-        setPromoCodes(updated);
-        onPromoCodesChange?.(updated);
-      }
-    }).catch(() => {});
-    setPromoForm({ code: '', type: 'percentage', value: '', usage_limit: '', min_order_amount: '' });
-    setShowAddPromo(false);
+        usage_limit: usageLimit !== null && Number.isFinite(usageLimit) ? usageLimit : null,
+        min_order_amount: minOrderAmount !== null && Number.isFinite(minOrderAmount) ? minOrderAmount : null,
+        is_active: true,
+        expires_at: null,
+      });
+      setPromoForm({ code: '', type: 'percentage', value: '', usage_limit: '', min_order_amount: '' });
+      setShowAddPromo(false);
+    } catch (err) {
+      setPromoFormError(errorMessage(err, 'Could not create promo code.'));
+    }
   };
 
-  const handleDeletePromoCode = (id: number | string) => {
-    fetch(`${API_BASE}/promo_codes.php?id=${id}`, { method: 'DELETE' }).catch(() => {});
-    const updated = promoCodes.filter(p => String(p.id) !== String(id));
-    setPromoCodes(updated);
-    onPromoCodesChange?.(updated);
+  const handleDeletePromoCode = async (id: string) => {
+    if (!confirm('Delete this promo code?')) return;
+    try {
+      await onDeletePromoCode(id);
+    } catch (err) {
+      alert(errorMessage(err, 'Could not delete this promo code.'));
+    }
   };
 
   const handleSaveShipping = async () => {
-    await fetch(`${API_BASE}/shipping_settings.php`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(shippingSettings),
-    });
-    setShippingSaved(true);
-    if (onShippingSettingsChange) onShippingSettingsChange(shippingSettings);
-    setTimeout(() => setShippingSaved(false), 2000);
+    setShippingError('');
+    if (shippingDraft.shipping_fee < 0 || shippingDraft.free_shipping_threshold < 0) {
+      setShippingError('Shipping values cannot be negative.');
+      return;
+    }
+    try {
+      await onUpdateShippingSettings(shippingDraft);
+      setShippingSaved(true);
+      setTimeout(() => setShippingSaved(false), 2000);
+    } catch (err) {
+      setShippingError(errorMessage(err, 'Could not save shipping settings.'));
+    }
+  };
+
+  const handleOrderStatusChange = async (orderId: string, status: Order['status']) => {
+    try {
+      await onUpdateOrderStatus(orderId, status);
+    } catch (err) {
+      alert(errorMessage(err, 'Could not update order status.'));
+    }
+  };
+
+  const handleCustomerStatusToggle = async (customer: Customer) => {
+    try {
+      await onUpdateCustomerStatus(customer.id, customer.status === 'Active' ? 'Inactive' : 'Active');
+    } catch (err) {
+      alert(errorMessage(err, 'Could not update customer status.'));
+    }
   };
 
   // --------------------------------------------------------
   // METRICS & ANALYTICS COMPUTATION
   // --------------------------------------------------------
-  const nonCancelledOrders = orders.filter(o => o.status !== 'Cancelled');
+  const nonCancelledOrders = orders.filter((o) => o.status !== 'Cancelled');
   const totalRevenue = nonCancelledOrders.reduce((sum, o) => sum + o.total, 0);
   const totalOrdersCount = orders.length;
-  const avgOrderValue = totalOrdersCount > 0 ? totalRevenue / nonCancelledOrders.length || 0 : 0;
-  
+  const avgOrderValue = nonCancelledOrders.length > 0 ? totalRevenue / nonCancelledOrders.length : 0;
+
   // Calculate category revenue for the SVG chart
   const categoryRevenue: { [key: string]: number } = {};
-  nonCancelledOrders.forEach(order => {
-    order.items.forEach(item => {
-      // Find item category to be precise
-      const prod = products.find(p => p.id === item.productId);
-      const cat = prod ? prod.category : 'Technology';
-      categoryRevenue[cat] = (categoryRevenue[cat] || 0) + (item.price * item.quantity);
+  nonCancelledOrders.forEach((order) => {
+    order.items.forEach((item) => {
+      const prod = products.find((p) => p.id === item.productId);
+      const cat = prod ? prod.category : 'Other';
+      categoryRevenue[cat] = (categoryRevenue[cat] || 0) + item.price * item.quantity;
     });
   });
 
-  const chartData = Object.keys(categoryRevenue).map(cat => ({
+  const chartData = Object.keys(categoryRevenue).map((cat) => ({
     category: cat,
     revenue: categoryRevenue[cat],
   }));
 
   // Ensure all standard categories have a bar (except 'All')
-  CATEGORIES.filter(c => c !== 'All').forEach(cat => {
+  CATEGORIES.filter((c) => c !== 'All').forEach((cat) => {
     if (!categoryRevenue[cat]) {
       chartData.push({ category: cat, revenue: 0 });
     }
   });
 
-  const maxRevenueInChart = Math.max(...chartData.map(d => d.revenue), 100);
+  const maxRevenueInChart = Math.max(...chartData.map((d) => d.revenue), 100);
 
   // --------------------------------------------------------
   // CRUD HANDLERS
   // --------------------------------------------------------
-  const handleCreateProductSubmit = (e: React.FormEvent) => {
+  const handleCreateProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProduct.name || !newProduct.price || !newProduct.inventory) {
-      alert('Please fill out all required fields.');
+    setProductFormError('');
+
+    const price = parseFloat(newProduct.price);
+    const inventory = parseInt(newProduct.inventory, 10);
+    if (!newProduct.name.trim() || !Number.isFinite(price) || price < 0 || !Number.isInteger(inventory) || inventory < 0) {
+      setProductFormError('Please provide a valid name, a non-negative price, and a whole-number inventory count.');
       return;
     }
 
-    // Assign dynamic image corresponding to category if none is provided
-    let finalImage = newProduct.image.trim();
-    if (!finalImage) {
-      if (newProduct.category === 'Technology') {
-        finalImage = 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80';
-      } else if (newProduct.category === 'Accessories') {
-        finalImage = 'https://images.unsplash.com/photo-1524498250077-390f9e378fc0?auto=format&fit=crop&w=600&q=80';
-      } else if (newProduct.category === 'Lifestyle') {
-        finalImage = 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=600&q=80';
-      } else {
-        finalImage = 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?auto=format&fit=crop&w=600&q=80';
-      }
+    const finalImage = newProduct.image.trim() || CATEGORY_IMAGE_FALLBACK[newProduct.category] || DEFAULT_PRODUCT_IMAGE;
+
+    try {
+      await onAddProduct({
+        name: newProduct.name.trim(),
+        description: newProduct.description.trim() || 'A brand new designer offering to complete your curated space.',
+        price,
+        category: newProduct.category,
+        inventory,
+        status: newProduct.status,
+        image: finalImage,
+        images: newProduct.images.filter((url) => url.trim() !== ''),
+        rating: 5.0,
+        featured: false,
+        material: null,
+        dimensions: null,
+      });
+
+      setNewProduct({ name: '', description: '', price: '', category: 'Technology', inventory: '', status: 'Active', image: '', images: [] });
+      setIsAddModalOpen(false);
+    } catch (err) {
+      setProductFormError(errorMessage(err, 'Could not create product.'));
     }
-
-    onAddProduct({
-      name: newProduct.name,
-      description: newProduct.description || 'A brand new designer offering to complete your curated space.',
-      price: parseFloat(newProduct.price),
-      category: newProduct.category,
-      inventory: parseInt(newProduct.inventory),
-      status: newProduct.status,
-      image: finalImage,
-      images: newProduct.images.filter(url => url.trim() !== ''),
-      rating: 5.0,
-      featured: false,
-    });
-
-    // Reset Form
-    setNewProduct({
-      name: '',
-      description: '',
-      price: '',
-      category: 'Technology',
-      inventory: '',
-      status: 'Active',
-      image: '',
-      images: [],
-    });
-    setIsAddModalOpen(false);
   };
 
-  const handleUpdateProductSubmit = (e: React.FormEvent) => {
+  const handleUpdateProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      onUpdateProduct(editingProduct);
+    if (!editingProduct) return;
+    setEditFormError('');
+    if (!Number.isFinite(editingProduct.price) || editingProduct.price < 0 || !Number.isInteger(editingProduct.inventory) || editingProduct.inventory < 0) {
+      setEditFormError('Price and inventory must be valid non-negative numbers.');
+      return;
+    }
+    try {
+      await onUpdateProduct(editingProduct);
       setEditingProduct(null);
+    } catch (err) {
+      setEditFormError(errorMessage(err, 'Could not save changes.'));
     }
   };
 
-  // --------------------------------------------------------
-  // HERO SLIDER TAB COMPONENT
-  // --------------------------------------------------------
-  function HeroSliderTab() {
-    const [slides, setSlides] = useState<HeroSlide[]>([]);
-    const [showForm, setShowForm] = useState(false);
-    const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null);
-    const [form, setForm] = useState({ image_url: '', alt_text: '', sort_order: '' });
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [uploading, setUploading] = useState(false);
+  const handleDeleteProductClick = async (product: Product) => {
+    if (!confirm(`Are you sure you want to delete ${product.name}?`)) return;
+    try {
+      await onDeleteProduct(product.id);
+    } catch (err) {
+      alert(errorMessage(err, 'Could not delete this product.'));
+    }
+  };
 
-    const fetchSlides = () => {
-      fetch(`${API_BASE}/hero_slides.php`)
-        .then(r => r.ok ? r.json() : [])
-        .then(d => Array.isArray(d) && setSlides(d))
-        .catch(() => {});
-    };
-
-    useEffect(() => { fetchSlides(); }, []);
-
-    const resetForm = () => {
-      setForm({ image_url: '', alt_text: '', sort_order: '' });
-      setSelectedFile(null);
-      setEditingSlide(null);
-      setShowForm(false);
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!form.image_url.trim() && !selectedFile) return;
-
-      const method = editingSlide ? 'PUT' : 'POST';
-      const body: any = { alt_text: form.alt_text.trim(), sort_order: form.sort_order ? parseInt(form.sort_order) : slides.length };
-      if (editingSlide) body.id = editingSlide.id;
-
-      if (selectedFile) {
-        const fd = new FormData();
-        fd.append('image_file', selectedFile);
-        fd.append('alt_text', body.alt_text);
-        fd.append('sort_order', String(body.sort_order));
-        if (editingSlide) fd.append('id', String(editingSlide.id));
-
-        setUploading(true);
-        fetch(`${API_BASE}/hero_slides.php`, { method, body: fd })
-          .then(r => { if (r.ok) { resetForm(); fetchSlides(); } })
-          .finally(() => setUploading(false));
-      } else {
-        body.image_url = form.image_url.trim();
-        fetch(`${API_BASE}/hero_slides.php`, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }).then(r => { if (r.ok) { resetForm(); fetchSlides(); } });
-      }
-    };
-
-    const handleEdit = (slide: HeroSlide) => {
-      setForm({ image_url: slide.image_url, alt_text: slide.alt_text, sort_order: String(slide.sort_order) });
-      setSelectedFile(null);
-      setEditingSlide(slide);
-      setShowForm(true);
-    };
-
-    const handleDelete = (id: number) => {
-      if (!confirm('Delete this slide?')) return;
-      fetch(`${API_BASE}/hero_slides.php?id=${id}`, { method: 'DELETE' })
-        .then(r => { if (r.ok) fetchSlides(); });
-    };
-
-    const handleToggleActive = (slide: HeroSlide) => {
-      fetch(`${API_BASE}/hero_slides.php`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: slide.id, is_active: slide.is_active ? 0 : 1 }),
-      }).then(r => { if (r.ok) fetchSlides(); });
-    };
-
-    return (
-      <div className="space-y-6 animate-in fade-in duration-150 text-left" id="hero-slider-pane">
-        <div className="flex items-center justify-between">
-          <h3 className="font-sans text-lg font-bold text-gray-900">Hero Slider Images</h3>
-          <button onClick={() => { resetForm(); setShowForm(!showForm); }}
-            className="flex items-center space-x-1.5 rounded-xl bg-gray-900 px-4 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">
-            <Plus className="h-4 w-4" />
-            <span>{showForm ? 'Cancel' : 'Add Slide'}</span>
-          </button>
-        </div>
-
-        {showForm && (
-          <form onSubmit={handleSubmit} className="max-w-lg rounded-2xl border border-gray-100 bg-white p-6 shadow-sm space-y-4">
-            <div className="border-b border-gray-100 pb-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Upload from PC</p>
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-                onChange={e => { setSelectedFile(e.target.files?.[0] || null); setForm({ ...form, image_url: '' }); }}
-                className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gray-900 file:text-white file:font-semibold file:text-sm hover:file:bg-gray-800" />
-              {selectedFile && <p className="mt-1 text-xs text-emerald-600">{selectedFile.name}</p>}
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 border-t border-gray-200" />
-              <span className="text-xs text-gray-400 font-semibold">OR</span>
-              <div className="flex-1 border-t border-gray-200" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Image URL</label>
-              <input type="text" value={form.image_url}
-                onChange={e => { setForm({ ...form, image_url: e.target.value }); setSelectedFile(null); }}
-                placeholder="https://example.com/image.jpg"
-                className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Alt Text</label>
-              <input type="text" value={form.alt_text}
-                onChange={e => setForm({ ...form, alt_text: e.target.value })}
-                placeholder="Describe the slide"
-                className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Sort Order</label>
-              <input type="number" min="0" value={form.sort_order}
-                onChange={e => setForm({ ...form, sort_order: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
-            </div>
-            <button type="submit" disabled={uploading}
-              className="rounded-xl bg-gray-900 px-6 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">
-              {uploading ? 'Uploading...' : editingSlide ? 'Update Slide' : 'Add Slide'}
-            </button>
-          </form>
-        )}
-
-        <div className="space-y-3">
-          {slides.map((slide, idx) => (
-            <div key={slide.id} className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-              <GripVertical className="h-5 w-5 text-gray-300 flex-shrink-0" />
-              <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                <img src={slide.image_url} alt={slide.alt_text} className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/200x150?text=No+Image'; }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{slide.alt_text || `Slide ${idx + 1}`}</p>
-                <p className="text-xs text-gray-400 truncate">{slide.image_url}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => handleToggleActive(slide)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                    slide.is_active
-                      ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-                  }`}>
-                  {slide.is_active ? 'Active' : 'Inactive'}
-                </button>
-                <button onClick={() => handleEdit(slide)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600">
-                  <Edit2 className="h-4 w-4" />
-                </button>
-                <button onClick={() => handleDelete(slide.id)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-          {slides.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-gray-200 p-10 text-center">
-              <Image className="mx-auto h-8 w-8 text-gray-300" />
-              <p className="mt-2 text-sm text-gray-400">No slides yet. Add your first hero slider image.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const filteredAdminProducts = products.filter((p) => {
+    const q = productSearch.toLowerCase();
+    return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
+  });
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
@@ -401,24 +537,20 @@ export default function AdminDashboard({
             Monitor shop performance, manage product stock, update order statuses, and review customers.
           </p>
         </div>
-        
-        {/* Dynamic Sync Status Badge */}
+
         <div className="flex items-center space-x-1.5 self-start rounded-full bg-emerald-50 px-3 py-1 font-mono text-xs font-semibold text-emerald-700 ring-1 ring-emerald-600/10">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span>REAL-TIME ENGINE ONLINE</span>
+          <span>INSFORGE CONNECTED</span>
         </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
-        
         {/* Left Side Dashboard Tabs */}
         <nav className="flex lg:flex-col lg:w-64 gap-1.5 overflow-x-auto pb-4 lg:pb-0 scrollbar-hide shrink-0 border-b lg:border-b-0 lg:border-r border-gray-100 pr-0 lg:pr-6">
           <button
             onClick={() => setActiveTab('overview')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'overview'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'overview' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-overview"
           >
@@ -429,41 +561,31 @@ export default function AdminDashboard({
           <button
             onClick={() => setActiveTab('products')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'products'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'products' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-products"
           >
             <Package className="h-4.5 w-4.5" />
             <span>Products</span>
-            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
-              {products.length}
-            </span>
+            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">{products.length}</span>
           </button>
 
           <button
             onClick={() => setActiveTab('orders')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'orders'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'orders' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-orders"
           >
             <ShoppingCart className="h-4.5 w-4.5" />
             <span>Orders</span>
-            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">
-              {orders.length}
-            </span>
+            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">{orders.length}</span>
           </button>
 
           <button
             onClick={() => setActiveTab('customers')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'customers'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'customers' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-customers"
           >
@@ -472,11 +594,21 @@ export default function AdminDashboard({
           </button>
 
           <button
+            onClick={() => setActiveTab('accounts')}
+            className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'accounts' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+            id="tab-btn-accounts"
+          >
+            <UserCog className="h-4.5 w-4.5" />
+            <span>Accounts</span>
+            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">{accounts.length}</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('promos')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'promos'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'promos' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-promos"
           >
@@ -487,9 +619,7 @@ export default function AdminDashboard({
           <button
             onClick={() => setActiveTab('shipping')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'shipping'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'shipping' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-shipping"
           >
@@ -500,9 +630,7 @@ export default function AdminDashboard({
           <button
             onClick={() => setActiveTab('hero-slider')}
             className={`flex items-center space-x-2.5 rounded-xl px-4 py-3 font-sans text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === 'hero-slider'
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-50'
+              activeTab === 'hero-slider' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
             }`}
             id="tab-btn-hero-slider"
           >
@@ -513,15 +641,10 @@ export default function AdminDashboard({
 
         {/* Right Side: Active Content Pane */}
         <div className="flex-1 min-w-0">
-          
-          {/* ======================================================== */}
           {/* TAB: OVERVIEW */}
-          {/* ======================================================== */}
           {activeTab === 'overview' && (
             <div className="space-y-8 animate-in fade-in duration-150" id="overview-pane">
-              {/* Stat Cards Grid */}
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                {/* Total Sales Revenue */}
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm text-left">
                   <div className="flex items-center justify-between">
                     <span className="font-sans text-xs font-semibold uppercase tracking-wider text-gray-400">Total Revenue</span>
@@ -535,7 +658,6 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                {/* Total Orders Volume */}
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm text-left">
                   <div className="flex items-center justify-between">
                     <span className="font-sans text-xs font-semibold uppercase tracking-wider text-gray-400">Total Orders</span>
@@ -549,7 +671,6 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                {/* Average Basket Value */}
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm text-left">
                   <div className="flex items-center justify-between">
                     <span className="font-sans text-xs font-semibold uppercase tracking-wider text-gray-400">Avg. Order Value</span>
@@ -563,7 +684,6 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                {/* Products Count */}
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm text-left">
                   <div className="flex items-center justify-between">
                     <span className="font-sans text-xs font-semibold uppercase tracking-wider text-gray-400">Catalog Size</span>
@@ -578,9 +698,7 @@ export default function AdminDashboard({
                 </div>
               </div>
 
-              {/* Chart & Recent Activity Grid */}
               <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-                {/* SVG Revenue Chart */}
                 <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm text-left lg:col-span-7">
                   <h3 className="font-sans text-base font-bold text-gray-900">Revenue by Category</h3>
                   <p className="font-sans text-xs text-gray-400 mb-6">Aggregate totals of items sold (৳)</p>
@@ -590,27 +708,19 @@ export default function AdminDashboard({
                       const barHeightPercent = Math.max((data.revenue / maxRevenueInChart) * 100, 3);
                       return (
                         <div key={idx} className="flex flex-col items-center flex-1 group">
-                          {/* Tooltip value */}
                           <div className="relative mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 rounded bg-gray-900 px-2 py-0.5 font-mono text-[10px] font-medium text-white shadow-lg whitespace-nowrap">
                               ৳{data.revenue.toFixed(2)}
                             </span>
                           </div>
-                          {/* Dynamic Bar */}
-                          <div 
-                            style={{ height: `${barHeightPercent}%` }} 
-                            className="w-8 rounded-t bg-gray-900 hover:bg-gray-700 transition-all duration-500 shadow-sm"
-                          />
-                          <span className="mt-2 font-sans text-[10px] font-medium text-gray-500 truncate max-w-[65px] px-0.5">
-                            {data.category}
-                          </span>
+                          <div style={{ height: `${barHeightPercent}%` }} className="w-8 rounded-t bg-gray-900 hover:bg-gray-700 transition-all duration-500 shadow-sm" />
+                          <span className="mt-2 font-sans text-[10px] font-medium text-gray-500 truncate max-w-[65px] px-0.5">{data.category}</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Recent Activities Feed */}
                 <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm text-left lg:col-span-5 flex flex-col justify-between">
                   <div>
                     <h3 className="font-sans text-base font-bold text-gray-900">Recent Sales Log</h3>
@@ -620,15 +730,22 @@ export default function AdminDashboard({
                       {orders.slice(0, 3).map((order) => (
                         <div key={order.id} className="flex items-center justify-between text-sm" id={`recent-${order.id}`}>
                           <div className="flex items-center space-x-3">
-                            <div className={`rounded-full p-2 ${
-                              order.status === 'Delivered' ? 'bg-emerald-50 text-emerald-600' :
-                              order.status === 'Cancelled' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                            }`}>
+                            <div
+                              className={`rounded-full p-2 ${
+                                order.status === 'Delivered'
+                                  ? 'bg-emerald-50 text-emerald-600'
+                                  : order.status === 'Cancelled'
+                                    ? 'bg-red-50 text-red-600'
+                                    : 'bg-amber-50 text-amber-600'
+                              }`}
+                            >
                               <ShoppingCart className="h-3.5 w-3.5" />
                             </div>
                             <div>
                               <p className="font-sans font-semibold text-gray-900">{order.customerName}</p>
-                              <p className="font-mono text-xs text-gray-400">{order.id} • {order.items.length} item(s)</p>
+                              <p className="font-mono text-xs text-gray-400" title={order.id}>
+                                {shortId(order.id)} • {order.items.length} item(s)
+                              </p>
                             </div>
                           </div>
                           <span className="font-mono font-bold text-gray-900">৳{order.total.toFixed(2)}</span>
@@ -637,7 +754,7 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => setActiveTab('orders')}
                     className="mt-6 flex w-full items-center justify-center space-x-1 rounded-lg border border-gray-100 bg-gray-50/50 py-2 font-sans text-xs font-semibold text-gray-600 hover:bg-gray-50"
                   >
@@ -649,17 +766,14 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* ======================================================== */}
           {/* TAB: PRODUCTS */}
-          {/* ======================================================== */}
           {activeTab === 'products' && (
             <div className="space-y-6 animate-in fade-in duration-150 text-left" id="products-pane">
-              {/* Product Header / Search Actions */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="relative flex-1 max-w-sm">
                   <input
                     type="text"
-                    placeholder="Search by product name..."
+                    placeholder="Search by name or description..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 py-2 pl-3 pr-10 text-sm focus:border-gray-900 focus:outline-none"
@@ -678,7 +792,6 @@ export default function AdminDashboard({
                 </button>
               </div>
 
-              {/* Products Table Wrapper */}
               <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
                 <table className="min-w-full divide-y divide-gray-100 text-sm">
                   <thead className="bg-gray-50/75">
@@ -694,83 +807,73 @@ export default function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
-                    {products
-                      .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
-                      .map((product) => (
-                        <tr key={product.id} className="hover:bg-gray-50/50" id={`admin-row-${product.id}`}>
-                          {/* Image & Title */}
-                          <td className="whitespace-nowrap px-6 py-4">
-                            <div className="flex items-center">
-                              <img
-                                src={product.image}
-                                alt={product.name}
-                                referrerPolicy="no-referrer"
-                                className="h-10 w-10 rounded-lg object-cover border border-gray-100 bg-gray-50"
-                              />
-                              <div className="ml-4 max-w-[160px]">
-                                <p className="font-sans font-semibold text-gray-900 truncate">{product.name}</p>
-                                <p className="font-mono text-xs text-gray-400">ID: {product.id}</p>
-                              </div>
+                    {filteredAdminProducts.map((product) => (
+                      <tr key={product.id} className="hover:bg-gray-50/50" id={`admin-row-${product.id}`}>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <div className="flex items-center">
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              referrerPolicy="no-referrer"
+                              className="h-10 w-10 rounded-lg object-cover border border-gray-100 bg-gray-50"
+                            />
+                            <div className="ml-4 max-w-[160px]">
+                              <p className="font-sans font-semibold text-gray-900 truncate">{product.name}</p>
+                              <p className="font-mono text-xs text-gray-400" title={product.id}>ID: {shortId(product.id)}</p>
                             </div>
-                          </td>
-                          {/* Category */}
-                          <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">{product.category}</td>
-                          {/* Price */}
-                          <td className="whitespace-nowrap px-6 py-4 font-mono font-medium text-gray-900">৳{product.price.toFixed(2)}</td>
-                          {/* Stock level */}
-                          <td className="whitespace-nowrap px-6 py-4">
-                            <span className={`font-mono font-medium ${product.inventory === 0 ? 'text-red-500 font-bold' : 'text-gray-900'}`}>
-                              {product.inventory} units
-                            </span>
-                          </td>
-                          {/* Status Badge */}
-                          <td className="whitespace-nowrap px-6 py-4">
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-sans text-xs font-semibold ${
-                              product.status === 'Active' ? 'bg-emerald-50 text-emerald-700' :
-                              product.status === 'Draft' ? 'bg-gray-100 text-gray-600' : 'bg-red-50 text-red-700'
-                            }`}>
-                              {product.status}
-                            </span>
-                          </td>
-                          {/* CRUD Actions column */}
-                          <td className="whitespace-nowrap px-6 py-4 text-right">
-                            <div className="flex items-center justify-end space-x-2">
-                              <button
-                                onClick={() => setEditingProduct(product)}
-                                className="rounded p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-900"
-                                title="Edit Product"
-                                id={`edit-prod-${product.id}`}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (confirm(`Are you sure you want to delete ${product.name}?`)) {
-                                    onDeleteProduct(product.id);
-                                  }
-                                }}
-                                className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                                title="Delete Product"
-                                id={`delete-prod-${product.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">{product.category}</td>
+                        <td className="whitespace-nowrap px-6 py-4 font-mono font-medium text-gray-900">৳{product.price.toFixed(2)}</td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span className={`font-mono font-medium ${product.inventory === 0 ? 'text-red-500 font-bold' : 'text-gray-900'}`}>
+                            {product.inventory} units
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-sans text-xs font-semibold ${
+                              product.status === 'Active'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : product.status === 'Draft'
+                                  ? 'bg-gray-100 text-gray-600'
+                                  : 'bg-red-50 text-red-700'
+                            }`}
+                          >
+                            {product.status}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => setEditingProduct(product)}
+                              className="rounded p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-900"
+                              title="Edit Product"
+                              id={`edit-prod-${product.id}`}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProductClick(product)}
+                              className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                              title="Delete Product"
+                              id={`delete-prod-${product.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* ======================================================== */}
           {/* TAB: ORDERS */}
-          {/* ======================================================== */}
           {activeTab === 'orders' && (
             <div className="space-y-6 animate-in fade-in duration-150 text-left" id="orders-pane">
-              {/* Search / Filters Bar */}
               <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
                 <div className="relative flex-1 max-w-sm">
                   <input
@@ -785,12 +888,12 @@ export default function AdminDashboard({
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <span className="font-sans text-xs font-semibold text-gray-400 uppercase tracking-wider">Filter Status:</span>
+                  <label htmlFor="order-status-filter" className="font-sans text-xs font-semibold text-gray-400 uppercase tracking-wider">Filter Status:</label>
                   <select
+                    id="order-status-filter"
                     value={orderStatusFilter}
                     onChange={(e) => setOrderStatusFilter(e.target.value)}
                     className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800"
-                    id="order-status-filter"
                   >
                     <option value="All">All Statuses</option>
                     <option value="Pending">Pending</option>
@@ -802,7 +905,6 @@ export default function AdminDashboard({
                 </div>
               </div>
 
-              {/* Orders Table Container */}
               <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
                 <table className="min-w-full divide-y divide-gray-100 text-sm">
                   <thead className="bg-gray-50/75">
@@ -820,46 +922,41 @@ export default function AdminDashboard({
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {orders
                       .filter((o) => {
-                        const matchesSearch = o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) || o.customerEmail.toLowerCase().includes(orderSearch.toLowerCase());
+                        const matchesSearch =
+                          o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
+                          o.customerEmail.toLowerCase().includes(orderSearch.toLowerCase());
                         const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
                         return matchesSearch && matchesStatus;
                       })
                       .map((order) => (
                         <tr key={order.id} className="hover:bg-gray-50/50" id={`order-row-${order.id}`}>
-                          {/* Order ID */}
-                          <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900">
-                            {order.id}
+                          <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900" title={order.id}>
+                            {shortId(order.id)}
                           </td>
-                          {/* Customer */}
                           <td className="whitespace-nowrap px-6 py-4">
                             <div>
                               <p className="font-sans font-semibold text-gray-900">{order.customerName}</p>
                               <p className="font-sans text-xs text-gray-400">{order.customerEmail}</p>
                             </div>
                           </td>
-                          {/* Date */}
                           <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">
-                            {new Date(order.createdAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
+                            {new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </td>
-                          {/* Total */}
-                          <td className="whitespace-nowrap px-6 py-4 font-mono font-semibold text-gray-900">
-                            ৳{order.total.toFixed(2)}
-                          </td>
-                          {/* Status changer Dropdown */}
+                          <td className="whitespace-nowrap px-6 py-4 font-mono font-semibold text-gray-900">৳{order.total.toFixed(2)}</td>
                           <td className="whitespace-nowrap px-6 py-4">
                             <select
                               value={order.status}
-                              onChange={(e) => onUpdateOrderStatus(order.id, e.target.value as any)}
+                              onChange={(e) => handleOrderStatusChange(order.id, e.target.value as Order['status'])}
                               className={`rounded px-2.5 py-1 text-xs font-semibold focus:outline-none ${
-                                order.status === 'Delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                                order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                order.status === 'Processing' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                'bg-amber-50 text-amber-700 border-amber-200'
+                                order.status === 'Delivered'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : order.status === 'Cancelled'
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : order.status === 'Shipped'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : order.status === 'Processing'
+                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                        : 'bg-amber-50 text-amber-700 border-amber-200'
                               } border`}
                               id={`status-dropdown-${order.id}`}
                             >
@@ -870,7 +967,6 @@ export default function AdminDashboard({
                               <option value="Cancelled">Cancelled</option>
                             </select>
                           </td>
-                          {/* View details action */}
                           <td className="whitespace-nowrap px-6 py-4 text-right">
                             <button
                               onClick={() => setSelectedOrderDetail(order)}
@@ -889,12 +985,9 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* ======================================================== */}
           {/* TAB: CUSTOMERS */}
-          {/* ======================================================== */}
           {activeTab === 'customers' && (
             <div className="space-y-6 animate-in fade-in duration-150 text-left" id="customers-pane">
-              {/* Search Customers */}
               <div className="relative max-w-sm">
                 <input
                   type="text"
@@ -907,7 +1000,6 @@ export default function AdminDashboard({
                 <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
               </div>
 
-              {/* Customers Table Container */}
               <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
                 <table className="min-w-full divide-y divide-gray-100 text-sm">
                   <thead className="bg-gray-50/75">
@@ -922,41 +1014,21 @@ export default function AdminDashboard({
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {customers
-                      .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.email.toLowerCase().includes(customerSearch.toLowerCase()))
+                      .filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()) || c.email.toLowerCase().includes(customerSearch.toLowerCase()))
                       .map((customer) => (
                         <tr key={customer.id} className="hover:bg-gray-50/50" id={`cust-row-${customer.id}`}>
-                          {/* Name */}
-                          <td className="whitespace-nowrap px-6 py-4 font-sans font-semibold text-gray-900">
-                            {customer.name}
-                          </td>
-                          {/* Email */}
-                          <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">
-                            {customer.email}
-                          </td>
-                          {/* Join Date */}
+                          <td className="whitespace-nowrap px-6 py-4 font-sans font-semibold text-gray-900">{customer.name}</td>
+                          <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">{customer.email}</td>
                           <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-500">
-                            {new Date(customer.joinDate).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
+                            {new Date(customer.joinDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </td>
-                          {/* Orders Counter */}
-                          <td className="whitespace-nowrap px-6 py-4 font-mono font-medium text-gray-900">
-                            {customer.totalOrders} purchases
-                          </td>
-                          {/* Accumulated Expenditures */}
-                          <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900">
-                            ৳{customer.totalSpent.toFixed(2)}
-                          </td>
-                          {/* Status */}
+                          <td className="whitespace-nowrap px-6 py-4 font-mono font-medium text-gray-900">{customer.totalOrders} purchases</td>
+                          <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900">৳{customer.totalSpent.toFixed(2)}</td>
                           <td className="whitespace-nowrap px-6 py-4">
                             <button
-                              onClick={() => onUpdateCustomerStatus(customer.id, customer.status === 'Active' ? 'Inactive' : 'Active')}
+                              onClick={() => handleCustomerStatusToggle(customer)}
                               className={`rounded-full px-2.5 py-0.5 font-sans text-xs font-semibold ${
-                                customer.status === 'Active' 
-                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' 
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                customer.status === 'Active' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                               }`}
                               title="Toggle Active status"
                             >
@@ -971,9 +1043,76 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* ======================================================== */}
+          {/* TAB: ACCOUNTS */}
+          {activeTab === 'accounts' && (
+            <div className="space-y-6 animate-in fade-in duration-150 text-left" id="accounts-pane">
+              <div>
+                <h3 className="font-sans text-lg font-bold text-gray-900">Registered Accounts</h3>
+                <p className="font-sans text-xs text-gray-400 mt-1">Everyone who has signed up, whether or not they've placed an order yet.</p>
+              </div>
+              <div className="relative max-w-sm">
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={accountSearch}
+                  onChange={(e) => setAccountSearch(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 py-2 pl-3 pr-10 text-sm focus:border-gray-900 focus:outline-none"
+                  id="account-search-input"
+                />
+                <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+                <table className="min-w-full divide-y divide-gray-100 text-sm">
+                  <thead className="bg-gray-50/75">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Name</th>
+                      <th scope="col" className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Email</th>
+                      <th scope="col" className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Phone</th>
+                      <th scope="col" className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Joined</th>
+                      <th scope="col" className="px-6 py-3 font-sans font-semibold text-gray-500 uppercase tracking-wider text-left text-xs">Role</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {accounts
+                      .filter(
+                        (a) =>
+                          (a.name ?? '').toLowerCase().includes(accountSearch.toLowerCase()) ||
+                          (a.email ?? '').toLowerCase().includes(accountSearch.toLowerCase())
+                      )
+                      .map((account) => (
+                        <tr key={account.id} className="hover:bg-gray-50/50">
+                          <td className="whitespace-nowrap px-6 py-4 font-sans font-semibold text-gray-900">{account.name || '—'}</td>
+                          <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">{account.email || '—'}</td>
+                          <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-500">{account.phone || '—'}</td>
+                          <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-500">
+                            {new Date(account.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4">
+                            {account.role === 'admin' ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 font-sans text-xs font-semibold text-indigo-700">
+                                <ShieldCheck className="h-3 w-3" /> Admin
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 font-sans text-xs font-semibold text-gray-600">Customer</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    {accounts.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center font-sans text-sm text-gray-400">
+                          No registered accounts yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* TAB: PROMO CODES */}
-          {/* ======================================================== */}
           {activeTab === 'promos' && (
             <div className="space-y-6 animate-in fade-in duration-150 text-left" id="promos-pane">
               <div className="flex items-center justify-between">
@@ -1001,7 +1140,7 @@ export default function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
-                    {Array.isArray(promoCodes) && promoCodes.map((promo) => (
+                    {promoCodes.map((promo) => (
                       <tr key={promo.id} className="hover:bg-gray-50/50">
                         <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900">{promo.code}</td>
                         <td className="whitespace-nowrap px-6 py-4">
@@ -1012,9 +1151,7 @@ export default function AdminDashboard({
                         <td className="whitespace-nowrap px-6 py-4 font-mono font-semibold text-gray-900">
                           {promo.type === 'percentage' ? `${promo.value}%` : `৳${(Number(promo.value) || 0).toFixed(2)}`}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 font-mono text-gray-600">
-                          {promo.min_order_amount ? `৳${promo.min_order_amount}` : '—'}
-                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 font-mono text-gray-600">{promo.min_order_amount ? `৳${promo.min_order_amount}` : '—'}</td>
                         <td className="whitespace-nowrap px-6 py-4 font-mono text-gray-600">
                           {promo.used_count}{promo.usage_limit ? ` / ${promo.usage_limit}` : ''}
                         </td>
@@ -1024,10 +1161,7 @@ export default function AdminDashboard({
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-right">
-                          <button
-                            onClick={() => handleDeletePromoCode(promo.id)}
-                            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                          >
+                          <button onClick={() => handleDeletePromoCode(promo.id)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600">
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </td>
@@ -1046,48 +1180,88 @@ export default function AdminDashboard({
                         <X className="h-4.5 w-4.5" />
                       </button>
                     </div>
-                    <form onSubmit={(e) => { e.preventDefault(); handleAddPromoCode(); }} className="space-y-4">
+                    {promoFormError && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{promoFormError}</p>}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleAddPromoCode();
+                      }}
+                      className="space-y-4"
+                    >
                       <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Code *</label>
-                        <input type="text" required value={promoForm.code} onChange={e => setPromoForm({...promoForm, code: e.target.value.toUpperCase()})}
-                          placeholder="SUMMER25" className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none font-mono" />
+                        <label htmlFor="promo-code" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Code *</label>
+                        <input
+                          id="promo-code"
+                          type="text"
+                          required
+                          value={promoForm.code}
+                          onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
+                          placeholder="SUMMER25"
+                          className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none font-mono"
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-x-4">
                         <div>
-                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</label>
-                          <select value={promoForm.type} onChange={e => setPromoForm({...promoForm, type: e.target.value})}
-                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm bg-white focus:border-gray-900 focus:outline-none">
+                          <label htmlFor="promo-type" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</label>
+                          <select
+                            id="promo-type"
+                            value={promoForm.type}
+                            onChange={(e) => setPromoForm({ ...promoForm, type: e.target.value as PromoCode['type'] })}
+                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm bg-white focus:border-gray-900 focus:outline-none"
+                          >
                             <option value="percentage">Percentage (%)</option>
                             <option value="flat">Flat Amount (৳)</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Value *</label>
-                          <input type="number" required min="0" step="0.01" value={promoForm.value}
-                            onChange={e => setPromoForm({...promoForm, value: e.target.value})}
+                          <label htmlFor="promo-value" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Value *</label>
+                          <input
+                            id="promo-value"
+                            type="number"
+                            required
+                            min="0"
+                            step="0.01"
+                            value={promoForm.value}
+                            onChange={(e) => setPromoForm({ ...promoForm, value: e.target.value })}
                             placeholder={promoForm.type === 'percentage' ? '10' : '5.00'}
-                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
+                          />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-x-4">
                         <div>
-                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Min Order (optional)</label>
-                          <input type="number" min="0" step="0.01" value={promoForm.min_order_amount}
-                            onChange={e => setPromoForm({...promoForm, min_order_amount: e.target.value})}
-                            placeholder="100.00" className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+                          <label htmlFor="promo-min-order" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Min Order (optional)</label>
+                          <input
+                            id="promo-min-order"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={promoForm.min_order_amount}
+                            onChange={(e) => setPromoForm({ ...promoForm, min_order_amount: e.target.value })}
+                            placeholder="100.00"
+                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
+                          />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Usage Limit (optional)</label>
-                          <input type="number" min="0" value={promoForm.usage_limit}
-                            onChange={e => setPromoForm({...promoForm, usage_limit: e.target.value})}
-                            placeholder="50" className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none" />
+                          <label htmlFor="promo-usage-limit" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Usage Limit (optional)</label>
+                          <input
+                            id="promo-usage-limit"
+                            type="number"
+                            min="0"
+                            value={promoForm.usage_limit}
+                            onChange={(e) => setPromoForm({ ...promoForm, usage_limit: e.target.value })}
+                            placeholder="50"
+                            className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
+                          />
                         </div>
                       </div>
                       <div className="flex space-x-3 pt-3">
-                        <button type="button" onClick={() => setShowAddPromo(false)}
-                          className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
-                        <button type="submit"
-                          className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">Create</button>
+                        <button type="button" onClick={() => setShowAddPromo(false)} className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                          Cancel
+                        </button>
+                        <button type="submit" className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">
+                          Create
+                        </button>
                       </div>
                     </form>
                   </div>
@@ -1096,75 +1270,91 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* ======================================================== */}
           {/* TAB: SHIPPING */}
-          {/* ======================================================== */}
           {activeTab === 'shipping' && (
             <div className="space-y-6 animate-in fade-in duration-150 text-left" id="shipping-pane">
               <h3 className="font-sans text-lg font-bold text-gray-900">Shipping Settings</h3>
 
               <div className="max-w-lg rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                 <div className="space-y-5">
+                  {shippingError && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{shippingError}</p>}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Standard Shipping Fee (৳)</label>
+                    <label htmlFor="shipping-fee" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Standard Shipping Fee (৳)</label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 font-mono text-sm text-gray-400">৳</span>
-                      <input type="number" min="0" step="0.01" value={shippingSettings.shipping_fee}
-                        onChange={e => { setShippingSettings({...shippingSettings, shipping_fee: parseFloat(e.target.value) || 0}); setShippingSaved(false); }}
-                        className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-gray-900 focus:outline-none font-mono" />
+                      <input
+                        id="shipping-fee"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={shippingDraft.shipping_fee}
+                        onChange={(e) => {
+                          setShippingDraft({ ...shippingDraft, shipping_fee: parseFloat(e.target.value) || 0 });
+                          setShippingSaved(false);
+                        }}
+                        className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-gray-900 focus:outline-none font-mono"
+                      />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Free Shipping Threshold (৳)</label>
+                    <label htmlFor="free-shipping-threshold" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Free Shipping Threshold (৳)</label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 font-mono text-sm text-gray-400">৳</span>
-                      <input type="number" min="0" step="0.01" value={shippingSettings.free_shipping_threshold}
-                        onChange={e => { setShippingSettings({...shippingSettings, free_shipping_threshold: parseFloat(e.target.value) || 0}); setShippingSaved(false); }}
-                        className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-gray-900 focus:outline-none font-mono" />
+                      <input
+                        id="free-shipping-threshold"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={shippingDraft.free_shipping_threshold}
+                        onChange={(e) => {
+                          setShippingDraft({ ...shippingDraft, free_shipping_threshold: parseFloat(e.target.value) || 0 });
+                          setShippingSaved(false);
+                        }}
+                        className="w-full rounded-lg border border-gray-200 py-2 pl-8 pr-3 text-sm focus:border-gray-900 focus:outline-none font-mono"
+                      />
                     </div>
                     <p className="mt-1 text-xs text-gray-400">Orders at or above this amount get free shipping.</p>
                   </div>
 
-                  <button onClick={handleSaveShipping}
-                    className="flex items-center space-x-2 rounded-xl bg-gray-900 px-6 py-3 font-sans text-sm font-semibold text-white hover:bg-gray-800">
-                    {shippingSaved ? <><Check className="h-4 w-4" /><span>Saved!</span></> : <span>Save Settings</span>}
+                  <button onClick={handleSaveShipping} className="flex items-center space-x-2 rounded-xl bg-gray-900 px-6 py-3 font-sans text-sm font-semibold text-white hover:bg-gray-800">
+                    {shippingSaved ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        <span>Saved!</span>
+                      </>
+                    ) : (
+                      <span>Save Settings</span>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ======================================================== */}
           {/* TAB: HERO SLIDER */}
-          {/* ======================================================== */}
-          {activeTab === 'hero-slider' && (
-            <HeroSliderTab />
-          )}
-
+          {activeTab === 'hero-slider' && <HeroSliderTab />}
         </div>
       </div>
 
-      {/* ======================================================== */}
       {/* DIALOG: ADD PRODUCT MODAL */}
-      {/* ======================================================== */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-in fade-in duration-200" id="add-product-modal">
-          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl p-6 text-left animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl p-6 text-left animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
               <h2 className="font-sans text-lg font-bold text-gray-900">Add New Product</h2>
-              <button 
-                onClick={() => setIsAddModalOpen(false)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-50"
-              >
+              <button onClick={() => setIsAddModalOpen(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-50">
                 <X className="h-4.5 w-4.5" />
               </button>
             </div>
 
+            {productFormError && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{productFormError}</p>}
+
             <form onSubmit={handleCreateProductSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Title *</label>
+                <label htmlFor="new-prod-name" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Title *</label>
                 <input
+                  id="new-prod-name"
                   type="text"
                   required
                   value={newProduct.name}
@@ -1175,8 +1365,9 @@ export default function AdminDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Description</label>
+                <label htmlFor="new-prod-desc" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Description</label>
                 <textarea
+                  id="new-prod-desc"
                   rows={2}
                   value={newProduct.description}
                   onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
@@ -1187,11 +1378,12 @@ export default function AdminDashboard({
 
               <div className="grid grid-cols-2 gap-x-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Price (৳) *</label>
+                  <label htmlFor="new-prod-price" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Price (৳) *</label>
                   <input
+                    id="new-prod-price"
                     type="number"
                     required
-                    min="1"
+                    min="0"
                     step="0.01"
                     value={newProduct.price}
                     onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
@@ -1201,8 +1393,9 @@ export default function AdminDashboard({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Inventory *</label>
+                  <label htmlFor="new-prod-inventory" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Inventory *</label>
                   <input
+                    id="new-prod-inventory"
                     type="number"
                     required
                     min="0"
@@ -1217,23 +1410,25 @@ export default function AdminDashboard({
 
               <div className="grid grid-cols-2 gap-x-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Category</label>
+                  <label htmlFor="new-prod-category" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Category</label>
                   <select
+                    id="new-prod-category"
                     value={newProduct.category}
                     onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
                     className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none bg-white"
                   >
-                    {CATEGORIES.filter(c => c !== 'All').map(cat => (
+                    {CATEGORIES.filter((c) => c !== 'All').map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Publish Status</label>
+                  <label htmlFor="new-prod-status" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Publish Status</label>
                   <select
+                    id="new-prod-status"
                     value={newProduct.status}
-                    onChange={(e) => setNewProduct({ ...newProduct, status: e.target.value as any })}
+                    onChange={(e) => setNewProduct({ ...newProduct, status: e.target.value as Product['status'] })}
                     className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none bg-white"
                   >
                     <option value="Active">Active</option>
@@ -1243,8 +1438,9 @@ export default function AdminDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Custom Image URL (Optional)</label>
+                <label htmlFor="new-prod-image" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Custom Image URL (Optional)</label>
                 <input
+                  id="new-prod-image"
                   type="url"
                   value={newProduct.image}
                   onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
@@ -1253,10 +1449,9 @@ export default function AdminDashboard({
                 />
               </div>
 
-              {/* Dynamic Gallery Image Input List */}
               <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Gallery Images</label>
+                  <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Gallery Images</span>
                   <button
                     type="button"
                     onClick={() => setNewProduct({ ...newProduct, images: [...(newProduct.images || []), ''] })}
@@ -1270,6 +1465,7 @@ export default function AdminDashboard({
                     <div key={index} className="flex items-center gap-1.5">
                       <input
                         type="url"
+                        aria-label={`Gallery image ${index + 1}`}
                         value={imgUrl}
                         onChange={(e) => {
                           const updatedImages = [...newProduct.images];
@@ -1281,6 +1477,7 @@ export default function AdminDashboard({
                       />
                       <button
                         type="button"
+                        aria-label={`Remove gallery image ${index + 1}`}
                         onClick={() => {
                           const updatedImages = newProduct.images.filter((_, i) => i !== index);
                           setNewProduct({ ...newProduct, images: updatedImages });
@@ -1298,17 +1495,10 @@ export default function AdminDashboard({
               </div>
 
               <div className="flex space-x-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50"
-                >
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800"
-                >
+                <button type="submit" className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">
                   Create Product
                 </button>
               </div>
@@ -1317,26 +1507,24 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* ======================================================== */}
       {/* DIALOG: EDIT PRODUCT MODAL */}
-      {/* ======================================================== */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-in fade-in duration-200" id="edit-product-modal">
-          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl p-6 text-left animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl p-6 text-left animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
               <h2 className="font-sans text-lg font-bold text-gray-900">Edit Product</h2>
-              <button 
-                onClick={() => setEditingProduct(null)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-50"
-              >
+              <button onClick={() => setEditingProduct(null)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-50">
                 <X className="h-4.5 w-4.5" />
               </button>
             </div>
 
+            {editFormError && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{editFormError}</p>}
+
             <form onSubmit={handleUpdateProductSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Title</label>
+                <label htmlFor="edit-prod-name" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Title</label>
                 <input
+                  id="edit-prod-name"
                   type="text"
                   required
                   value={editingProduct.name}
@@ -1346,8 +1534,9 @@ export default function AdminDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Description</label>
+                <label htmlFor="edit-prod-desc" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Description</label>
                 <textarea
+                  id="edit-prod-desc"
                   rows={2}
                   value={editingProduct.description}
                   onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
@@ -1357,11 +1546,12 @@ export default function AdminDashboard({
 
               <div className="grid grid-cols-2 gap-x-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Price (৳)</label>
+                  <label htmlFor="edit-prod-price" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Price (৳)</label>
                   <input
+                    id="edit-prod-price"
                     type="number"
                     required
-                    min="1"
+                    min="0"
                     step="0.01"
                     value={editingProduct.price}
                     onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
@@ -1370,14 +1560,15 @@ export default function AdminDashboard({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Stock Level</label>
+                  <label htmlFor="edit-prod-inventory" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Stock Level</label>
                   <input
+                    id="edit-prod-inventory"
                     type="number"
                     required
                     min="0"
                     step="1"
                     value={editingProduct.inventory}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, inventory: parseInt(e.target.value) || 0 })}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, inventory: parseInt(e.target.value, 10) || 0 })}
                     className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none"
                   />
                 </div>
@@ -1385,23 +1576,25 @@ export default function AdminDashboard({
 
               <div className="grid grid-cols-2 gap-x-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Category</label>
+                  <label htmlFor="edit-prod-category" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Category</label>
                   <select
+                    id="edit-prod-category"
                     value={editingProduct.category}
                     onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
                     className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none bg-white"
                   >
-                    {CATEGORIES.filter(c => c !== 'All').map(cat => (
+                    {CATEGORIES.filter((c) => c !== 'All').map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Publish Status</label>
+                  <label htmlFor="edit-prod-status" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Publish Status</label>
                   <select
+                    id="edit-prod-status"
                     value={editingProduct.status}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, status: e.target.value as any })}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, status: e.target.value as Product['status'] })}
                     className="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-900 focus:outline-none bg-white"
                   >
                     <option value="Active">Active</option>
@@ -1412,8 +1605,9 @@ export default function AdminDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Image URL</label>
+                <label htmlFor="edit-prod-image" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Image URL</label>
                 <input
+                  id="edit-prod-image"
                   type="url"
                   value={editingProduct.image}
                   onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
@@ -1421,10 +1615,9 @@ export default function AdminDashboard({
                 />
               </div>
 
-              {/* Dynamic Gallery Image Input List for Editing */}
               <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Gallery Images</label>
+                  <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Gallery Images</span>
                   <button
                     type="button"
                     onClick={() => setEditingProduct({ ...editingProduct, images: [...(editingProduct.images || []), ''] })}
@@ -1438,6 +1631,7 @@ export default function AdminDashboard({
                     <div key={index} className="flex items-center gap-1.5">
                       <input
                         type="url"
+                        aria-label={`Gallery image ${index + 1}`}
                         value={imgUrl}
                         onChange={(e) => {
                           const updatedImages = [...(editingProduct.images || [])];
@@ -1449,6 +1643,7 @@ export default function AdminDashboard({
                       />
                       <button
                         type="button"
+                        aria-label={`Remove gallery image ${index + 1}`}
                         onClick={() => {
                           const updatedImages = (editingProduct.images || []).filter((_, i) => i !== index);
                           setEditingProduct({ ...editingProduct, images: updatedImages });
@@ -1466,17 +1661,10 @@ export default function AdminDashboard({
               </div>
 
               <div className="flex space-x-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50"
-                >
+                <button type="button" onClick={() => setEditingProduct(null)} className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800"
-                >
+                <button type="submit" className="w-1/2 rounded-xl bg-gray-900 py-2.5 font-sans text-sm font-semibold text-white hover:bg-gray-800">
                   Save Changes
                 </button>
               </div>
@@ -1485,36 +1673,24 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* ======================================================== */}
       {/* DRAWER: DETAILED ORDER SLIDE-OPEN */}
-      {/* ======================================================== */}
       {selectedOrderDetail && (
         <div className="fixed inset-0 z-50 overflow-hidden" id="order-detail-overlay">
-          <div 
-            className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
-            onClick={() => setSelectedOrderDetail(null)}
-          />
+          <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" onClick={() => setSelectedOrderDetail(null)} />
 
           <div className="absolute inset-y-0 right-0 flex max-w-full pl-10">
             <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-250 text-left">
-              
-              {/* Drawer Header */}
               <div className="flex items-center justify-between px-4 py-5 sm:px-6 border-b border-gray-100">
                 <div>
                   <span className="font-sans text-xs uppercase tracking-wider text-gray-400 font-semibold">Order Details</span>
-                  <h2 className="font-mono text-sm font-bold text-gray-900">{selectedOrderDetail.id}</h2>
+                  <h2 className="font-mono text-sm font-bold text-gray-900" title={selectedOrderDetail.id}>{shortId(selectedOrderDetail.id)}</h2>
                 </div>
-                <button
-                  onClick={() => setSelectedOrderDetail(null)}
-                  className="rounded-lg p-1 text-gray-400 hover:bg-gray-50"
-                >
+                <button onClick={() => setSelectedOrderDetail(null)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-50">
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              {/* Drawer Body content */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 font-sans">
-                {/* Logistics */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Customer Shipping</h3>
                   <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/50 space-y-2 text-sm text-gray-800">
@@ -1524,15 +1700,15 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                {/* Status Adjuster */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Fulfillment Workflow</h3>
                   <div className="flex items-center space-x-3">
                     <select
                       value={selectedOrderDetail.status}
                       onChange={(e) => {
-                        onUpdateOrderStatus(selectedOrderDetail.id, e.target.value as any);
-                        setSelectedOrderDetail({ ...selectedOrderDetail, status: e.target.value as any });
+                        const status = e.target.value as Order['status'];
+                        handleOrderStatusChange(selectedOrderDetail.id, status);
+                        setSelectedOrderDetail({ ...selectedOrderDetail, status });
                       }}
                       className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none flex-1"
                     >
@@ -1545,33 +1721,22 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                {/* Items Purchased */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Ordered Items ({selectedOrderDetail.items.length})</h3>
                   <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl bg-white overflow-hidden">
-                    {selectedOrderDetail.items.map((item) => (
-                      <div key={item.productId} className="flex p-3 items-center text-sm">
-                        {item.image && (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            referrerPolicy="no-referrer"
-                            className="h-10 w-10 rounded object-cover border border-gray-100 mr-3"
-                          />
-                        )}
+                    {selectedOrderDetail.items.map((item, idx) => (
+                      <div key={`${item.productId ?? 'item'}-${idx}`} className="flex p-3 items-center text-sm">
+                        {item.image && <img src={item.image} alt={item.name} referrerPolicy="no-referrer" className="h-10 w-10 rounded object-cover border border-gray-100 mr-3" />}
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-900 line-clamp-1">{item.name}</h4>
                           <p className="text-xs text-gray-400">Qty: {item.quantity} • ৳{item.price.toFixed(2)}</p>
                         </div>
-                        <span className="font-mono text-gray-800 font-medium ml-2">
-                          ৳{(item.price * item.quantity).toFixed(2)}
-                        </span>
+                        <span className="font-mono text-gray-800 font-medium ml-2">৳{(item.price * item.quantity).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Summary calculation */}
                 <div className="border-t border-gray-100 pt-4 space-y-1.5 text-sm">
                   <div className="flex justify-between text-gray-500">
                     <span>Subtotal</span>
@@ -1599,14 +1764,13 @@ export default function AdminDashboard({
                 <div className="pt-4 text-xs text-gray-400 flex items-center space-x-1 justify-center border-t border-gray-100">
                   <span>Method of Payment:</span>
                   <span className="font-semibold text-gray-700">{selectedOrderDetail.paymentMethod}</span>
+                  <CheckCircle2 className={`h-3.5 w-3.5 ${selectedOrderDetail.paymentStatus === 'paid' ? 'text-emerald-500' : 'text-gray-300'}`} />
                 </div>
               </div>
-
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

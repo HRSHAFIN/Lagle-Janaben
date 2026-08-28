@@ -4,8 +4,8 @@ import Logo from './Logo';
 import GoogleAuthButton from './GoogleAuthButton';
 
 interface LoginProps {
-  onLogin: (identifier: string, password: string) => Promise<string | null>;
-  onGoogleLogin: (credential: string) => Promise<string | null>;
+  onLogin: (email: string, password: string) => Promise<string | null>;
+  onGoogleLogin: () => void;
   onNavigateRegister: () => void;
   onBackToCatalog: () => void;
 }
@@ -22,19 +22,13 @@ export default function Login({ onLogin, onGoogleLogin, onNavigateRegister, onBa
     setError('');
 
     if (!identifier.trim() || !password) {
-      setError('Please enter your email/phone number and password');
+      setError('Please enter your email and password');
       return;
     }
 
     setIsSubmitting(true);
     const err = await onLogin(identifier.trim(), password);
     setIsSubmitting(false);
-    if (err) setError(err);
-  };
-
-  const handleGoogle = async (credential: string) => {
-    setError('');
-    const err = await onGoogleLogin(credential);
     if (err) setError(err);
   };
 
@@ -102,18 +96,18 @@ export default function Login({ onLogin, onGoogleLogin, onNavigateRegister, onBa
           <form onSubmit={handleSubmit} className="mt-8 space-y-5" id="login-form">
             <div>
               <label htmlFor="identifier" className="mb-1.5 block font-sans text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Email or Phone Number
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="text"
+                  type="email"
                   id="identifier"
                   name="identifier"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3.5 text-sm focus:border-[#1E2D44] focus:outline-none focus:ring-1 focus:ring-[#1E2D44]"
-                  placeholder="you@example.com or 017XXXXXXXX"
+                  placeholder="you@example.com"
                   autoComplete="username"
                 />
               </div>
@@ -162,7 +156,7 @@ export default function Login({ onLogin, onGoogleLogin, onNavigateRegister, onBa
             <div className="h-px flex-1 bg-gray-100" />
           </div>
 
-          <GoogleAuthButton text="signin_with" onCredential={handleGoogle} />
+          <GoogleAuthButton label="Sign in with Google" onClick={onGoogleLogin} />
         </div>
       </div>
     </div>

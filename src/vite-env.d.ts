@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_GOOGLE_CLIENT_ID?: string;
+  readonly VITE_INSFORGE_URL: string;
+  readonly VITE_INSFORGE_ANON_KEY: string;
 }
 
 interface ImportMeta {

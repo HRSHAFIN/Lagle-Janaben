@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingBag, LayoutDashboard, LogOut, User as UserIcon } from 'lucide-react';
+import { ShoppingBag, LayoutDashboard, LogOut, User as UserIcon, Package } from 'lucide-react';
 import { User, ViewType } from '../types';
 import Logo from './Logo';
 
@@ -54,19 +54,21 @@ export default function Navbar({ currentView, onViewChange, cartCount, onCartCli
             <span className="hidden sm:inline">Shop</span>
           </button>
 
-          <button
-            id="nav-admin-btn"
-            onClick={() => onViewChange('admin')}
-            className={`flex items-center space-x-1 rounded-lg px-2 py-2 sm:px-3 sm:space-x-1.5 font-sans text-xs sm:text-sm font-medium transition-colors ${
-              currentView === 'admin'
-                ? 'bg-gray-50 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            <span className="hidden sm:inline">Admin Panel</span>
-            <span className="inline sm:hidden">Admin</span>
-          </button>
+          {currentUser?.role === 'admin' && (
+            <button
+              id="nav-admin-btn"
+              onClick={() => onViewChange('admin')}
+              className={`flex items-center space-x-1 rounded-lg px-2 py-2 sm:px-3 sm:space-x-1.5 font-sans text-xs sm:text-sm font-medium transition-colors ${
+                currentView === 'admin'
+                  ? 'bg-gray-50 text-gray-900'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span className="hidden sm:inline">Admin Panel</span>
+              <span className="inline sm:hidden">Admin</span>
+            </button>
+          )}
 
           {/* Vertical Divider */}
           <span className="h-5 w-px bg-gray-200" aria-hidden="true" />
@@ -91,6 +93,17 @@ export default function Navbar({ currentView, onViewChange, cartCount, onCartCli
                       <p className="font-sans text-sm font-semibold text-gray-900 truncate">{currentUser.name}</p>
                       <p className="font-sans text-xs text-gray-400 truncate">{currentUser.email}</p>
                     </div>
+                    <button
+                      id="nav-my-orders-btn"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        onViewChange('my-orders');
+                      }}
+                      className="flex w-full items-center space-x-2 rounded-lg px-3 py-2 font-sans text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <Package className="h-4 w-4" />
+                      <span>My Orders</span>
+                    </button>
                     <button
                       id="nav-logout-btn"
                       onClick={() => {
