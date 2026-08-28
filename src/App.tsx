@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Product, Order, Customer, Account, CartItem, ViewType, PromoCode, ShippingSettings, User } from './types';
+import { Product, Order, Customer, Account, CartItem, ViewType, PromoCode, ShippingSettings, User, SelectedOptions } from './types';
+import { cartItemKey, findCartItem } from './lib/cart';
 import Navbar from './components/Navbar';
 import CatalogView from './components/CatalogView';
 import CartDrawer from './components/CartDrawer';
@@ -231,8 +232,8 @@ export default function App() {
   // --------------------------------------------------------
   // SHOPPING CART CONTROLLERS
   // --------------------------------------------------------
-  const handleAddToCart = (product: Product) => {
-    const existing = cart.find((item) => item.product.id === product.id);
+  const handleAddToCart = (product: Product, options: SelectedOptions = {}) => {
+    const existing = findCartItem(cart, product.id, options);
     const currentQtyInCart = existing ? existing.quantity : 0;
     if (currentQtyInCart >= product.inventory) {
       alert(`Cannot add more. We only have ${product.inventory} units of ${product.name} in stock.`);
@@ -240,15 +241,16 @@ export default function App() {
     }
 
     if (existing) {
-      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)));
+      const key = cartItemKey(existing);
+      setCart(cart.map((item) => (cartItemKey(item) === key ? { ...item, quantity: item.quantity + 1 } : item)));
     } else {
-      setCart([...cart, { product, quantity: 1 }]);
+      setCart([...cart, { product, quantity: 1, ...options }]);
     }
     setCartOpen(true);
   };
 
-  const handleAddToCartWithQty = (product: Product, quantity: number) => {
-    const existing = cart.find((item) => item.product.id === product.id);
+  const handleAddToCartWithQty = (product: Product, quantity: number, options: SelectedOptions = {}) => {
+    const existing = findCartItem(cart, product.id, options);
     const currentQtyInCart = existing ? existing.quantity : 0;
 
     if (currentQtyInCart + quantity > product.inventory) {
@@ -257,45 +259,47 @@ export default function App() {
     }
 
     if (existing) {
-      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity: item.quantity + quantity } : item)));
+      const key = cartItemKey(existing);
+      setCart(cart.map((item) => (cartItemKey(item) === key ? { ...item, quantity: item.quantity + quantity } : item)));
     } else {
-      setCart([...cart, { product, quantity }]);
+      setCart([...cart, { product, quantity, ...options }]);
     }
     setCartOpen(true);
   };
 
-  const handleInstantCheckout = (product: Product, quantity: number) => {
+  const handleInstantCheckout = (product: Product, quantity: number, options: SelectedOptions = {}) => {
     if (quantity > product.inventory) {
       alert(`Cannot purchase this amount. We only have ${product.inventory} units in stock.`);
       return;
     }
 
-    const existing = cart.find((item) => item.product.id === product.id);
+    const existing = findCartItem(cart, product.id, options);
     if (existing) {
-      setCart(cart.map((item) => (item.product.id === product.id ? { ...item, quantity } : item)));
+      const key = cartItemKey(existing);
+      setCart(cart.map((item) => (cartItemKey(item) === key ? { ...item, quantity } : item)));
     } else {
-      setCart([...cart, { product, quantity }]);
+      setCart([...cart, { product, quantity, ...options }]);
     }
 
     setCurrentView('checkout');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleUpdateQuantity = (productId: string, quantity: number) => {
+  const handleUpdateQuantity = (key: string, quantity: number) => {
     if (quantity <= 0) {
-      handleRemoveItem(productId);
+      handleRemoveItem(key);
       return;
     }
-    const prod = products.find((p) => p.id === productId);
-    if (prod && quantity > prod.inventory) {
-      alert(`Sorry, only ${prod.inventory} units are available.`);
+    const item = cart.find((i) => cartItemKey(i) === key);
+    if (item && quantity > item.product.inventory) {
+      alert(`Sorry, only ${item.product.inventory} units are available.`);
       return;
     }
-    setCart(cart.map((item) => (item.product.id === productId ? { ...item, quantity } : item)));
+    setCart(cart.map((i) => (cartItemKey(i) === key ? { ...i, quantity } : i)));
   };
 
-  const handleRemoveItem = (productId: string) => {
-    setCart(cart.filter((item) => item.product.id !== productId));
+  const handleRemoveItem = (key: string) => {
+    setCart(cart.filter((item) => cartItemKey(item) !== key));
   };
 
   const handleApplyPromo = async (code: string) => {

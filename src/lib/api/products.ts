@@ -1,5 +1,5 @@
 import { insforge } from '../insforge';
-import { Product } from '../../types';
+import { Product, ProductOption } from '../../types';
 
 interface ProductRow {
   id: string;
@@ -15,6 +15,9 @@ interface ProductRow {
   rating: number | string;
   featured: boolean;
   status: Product['status'];
+  sizes: ProductOption[] | null;
+  colors: ProductOption[] | null;
+  variants: ProductOption[] | null;
 }
 
 function mapProduct(row: ProductRow): Product {
@@ -32,6 +35,9 @@ function mapProduct(row: ProductRow): Product {
     rating: Number(row.rating),
     featured: row.featured,
     status: row.status,
+    sizes: row.sizes ?? [],
+    colors: row.colors ?? [],
+    variants: row.variants ?? [],
   };
 }
 
@@ -62,6 +68,9 @@ export async function createProduct(product: Omit<Product, 'id'>): Promise<Produ
         rating: product.rating,
         featured: product.featured,
         status: product.status,
+        sizes: product.sizes ?? [],
+        colors: product.colors ?? [],
+        variants: product.variants ?? [],
       },
     ])
     .select();
@@ -85,6 +94,9 @@ export async function updateProduct(product: Product): Promise<Product> {
       rating: product.rating,
       featured: product.featured,
       status: product.status,
+      sizes: product.sizes ?? [],
+      colors: product.colors ?? [],
+      variants: product.variants ?? [],
     })
     .eq('id', product.id)
     .select();

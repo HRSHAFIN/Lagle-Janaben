@@ -1,3 +1,10 @@
+export interface ProductOption {
+  label: string;
+  available: boolean;
+  /** Colors only — optional hex swatch. */
+  hex?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -12,14 +19,23 @@ export interface Product {
   rating: number;
   featured: boolean;
   status: 'Active' | 'Draft' | 'Out of Stock';
+  sizes: ProductOption[];
+  colors: ProductOption[];
+  variants: ProductOption[];
 }
 
-export interface CartItem {
+export interface SelectedOptions {
+  size?: string | null;
+  color?: string | null;
+  variant?: string | null;
+}
+
+export interface CartItem extends SelectedOptions {
   product: Product;
   quantity: number;
 }
 
-export interface OrderItem {
+export interface OrderItem extends SelectedOptions {
   productId: string | null;
   name: string;
   price: number;

@@ -4,9 +4,11 @@ import {
   Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2,
   AlertTriangle, Percent, Truck, Image, GripVertical, UserCog, ShieldCheck
 } from 'lucide-react';
-import { Product, Order, Customer, Account, AdminTabType, PromoCode, ShippingSettings, HeroSlide } from '../types';
+import { Product, Order, Customer, Account, AdminTabType, PromoCode, ShippingSettings, HeroSlide, ProductOption } from '../types';
 import { CATEGORIES } from '../data';
 import { fetchHeroSlides, uploadHeroImage, createHeroSlide, updateHeroSlide, deleteHeroSlide } from '../lib/api/heroSlides';
+import ProductOptionsEditor from './ProductOptionsEditor';
+import { formatSelectedOptions } from '../lib/cart';
 
 function shortId(id: string): string {
   return `#${id.slice(0, 8).toUpperCase()}`;
@@ -332,6 +334,9 @@ export default function AdminDashboard({
     status: 'Active' as Product['status'],
     image: '',
     images: [] as string[],
+    sizes: [] as ProductOption[],
+    colors: [] as ProductOption[],
+    variants: [] as ProductOption[],
   });
 
   // Orders tab states
@@ -497,9 +502,24 @@ export default function AdminDashboard({
         featured: false,
         material: null,
         dimensions: null,
+        sizes: newProduct.sizes.filter((o) => o.label.trim() !== ''),
+        colors: newProduct.colors.filter((o) => o.label.trim() !== ''),
+        variants: newProduct.variants.filter((o) => o.label.trim() !== ''),
       });
 
-      setNewProduct({ name: '', description: '', price: '', category: 'Technology', inventory: '', status: 'Active', image: '', images: [] });
+      setNewProduct({
+        name: '',
+        description: '',
+        price: '',
+        category: 'Technology',
+        inventory: '',
+        status: 'Active',
+        image: '',
+        images: [],
+        sizes: [],
+        colors: [],
+        variants: [],
+      });
       setIsAddModalOpen(false);
     } catch (err) {
       setProductFormError(errorMessage(err, 'Could not create product.'));
@@ -515,7 +535,12 @@ export default function AdminDashboard({
       return;
     }
     try {
-      await onUpdateProduct(editingProduct);
+      await onUpdateProduct({
+        ...editingProduct,
+        sizes: editingProduct.sizes.filter((o) => o.label.trim() !== ''),
+        colors: editingProduct.colors.filter((o) => o.label.trim() !== ''),
+        variants: editingProduct.variants.filter((o) => o.label.trim() !== ''),
+      });
       setEditingProduct(null);
     } catch (err) {
       setEditFormError(errorMessage(err, 'Could not save changes.'));
@@ -1520,6 +1545,26 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              <ProductOptionsEditor
+                label="Sizes"
+                placeholder="e.g. Medium"
+                options={newProduct.sizes}
+                onChange={(sizes) => setNewProduct({ ...newProduct, sizes })}
+              />
+              <ProductOptionsEditor
+                label="Colors"
+                placeholder="e.g. Red"
+                withColor
+                options={newProduct.colors}
+                onChange={(colors) => setNewProduct({ ...newProduct, colors })}
+              />
+              <ProductOptionsEditor
+                label="Variants"
+                placeholder="e.g. Gift Wrapped"
+                options={newProduct.variants}
+                onChange={(variants) => setNewProduct({ ...newProduct, variants })}
+              />
+
               <div className="flex space-x-3 pt-3">
                 <button type="button" onClick={() => setIsAddModalOpen(false)} className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">
                   Cancel
@@ -1686,6 +1731,26 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              <ProductOptionsEditor
+                label="Sizes"
+                placeholder="e.g. Medium"
+                options={editingProduct.sizes}
+                onChange={(sizes) => setEditingProduct({ ...editingProduct, sizes })}
+              />
+              <ProductOptionsEditor
+                label="Colors"
+                placeholder="e.g. Red"
+                withColor
+                options={editingProduct.colors}
+                onChange={(colors) => setEditingProduct({ ...editingProduct, colors })}
+              />
+              <ProductOptionsEditor
+                label="Variants"
+                placeholder="e.g. Gift Wrapped"
+                options={editingProduct.variants}
+                onChange={(variants) => setEditingProduct({ ...editingProduct, variants })}
+              />
+
               <div className="flex space-x-3 pt-3">
                 <button type="button" onClick={() => setEditingProduct(null)} className="w-1/2 rounded-xl border border-gray-200 py-2.5 font-sans text-sm font-semibold text-gray-600 hover:bg-gray-50">
                   Cancel
@@ -1756,6 +1821,9 @@ export default function AdminDashboard({
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-900 line-clamp-1">{item.name}</h4>
                           <p className="text-xs text-gray-400">Qty: {item.quantity} • ৳{item.price.toFixed(2)}</p>
+                          {formatSelectedOptions(item) && (
+                            <p className="text-xs text-[#B88E4C] font-medium">{formatSelectedOptions(item)}</p>
+                          )}
                         </div>
                         <span className="font-mono text-gray-800 font-medium ml-2">৳{(item.price * item.quantity).toFixed(2)}</span>
                       </div>

@@ -4,6 +4,7 @@ import { CartItem, Order, ShippingSettings } from '../types';
 import { SslcommerzDeliveryDetails } from '../lib/api/orders';
 import { computeOrderTotals } from '../lib/pricing';
 import { isValidEmail, isValidBdPhone } from '../lib/validation';
+import { cartItemKey, formatSelectedOptions } from '../lib/cart';
 
 interface AppliedPromo {
   code: string;
@@ -259,6 +260,9 @@ export default function CheckoutView({
                     <div>
                       <h4 className="font-sans font-medium text-gray-900">{item.name}</h4>
                       <p className="font-sans text-xs text-gray-400">Qty: {item.quantity}</p>
+                      {formatSelectedOptions(item) && (
+                        <p className="font-sans text-xs text-[#B88E4C] font-medium">{formatSelectedOptions(item)}</p>
+                      )}
                     </div>
                   </div>
                   <span className="font-mono text-gray-800 font-medium">
@@ -691,8 +695,11 @@ export default function CheckoutView({
 
             {/* List of checkout items */}
             <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto mb-6 pr-1">
-              {cart.map((item) => (
-                <div key={item.product.id} className="flex py-4 first:pt-0" id={`summary-item-${item.product.id}`}>
+              {cart.map((item) => {
+                const key = cartItemKey(item);
+                const optionsLabel = formatSelectedOptions(item);
+                return (
+                <div key={key} className="flex py-4 first:pt-0" id={`summary-item-${key}`}>
                   <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50">
                     <img
                       src={item.product.image}
@@ -706,13 +713,15 @@ export default function CheckoutView({
                       <h4 className="line-clamp-1 pr-2">{item.product.name}</h4>
                       <p className="font-mono ml-2">৳{(item.product.price * item.quantity).toFixed(2)}</p>
                     </div>
+                    {optionsLabel && <p className="font-sans text-xs text-[#B88E4C] font-medium mt-0.5">{optionsLabel}</p>}
                     <div className="flex justify-between font-sans text-xs text-gray-400 mt-1">
                       <span>Category: {item.product.category}</span>
                       <span>Qty: {item.quantity}</span>
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Prices Calculation Block */}

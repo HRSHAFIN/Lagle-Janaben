@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Package, ShoppingBag, AlertTriangle, Timer } from 'lucide-react';
 import { Order } from '../types';
+import { formatSelectedOptions } from '../lib/cart';
 
 const CANCEL_WINDOW_MS = 2 * 60 * 60 * 1000;
 
@@ -121,6 +122,9 @@ export default function MyOrdersView({ orders, loading, onCancelOrder, onBackToC
                   <div key={`${item.productId ?? 'item'}-${idx}`} className="flex justify-between text-sm">
                     <span className="text-gray-700">
                       {item.name} <span className="text-gray-400">× {item.quantity}</span>
+                      {formatSelectedOptions(item) && (
+                        <span className="block text-xs text-[#B88E4C] font-medium">{formatSelectedOptions(item)}</span>
+                      )}
                     </span>
                     <span className="font-mono text-gray-800">৳{(item.price * item.quantity).toFixed(2)}</span>
                   </div>

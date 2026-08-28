@@ -436,7 +436,14 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
                     </p>
 
                     <button
-                      onClick={() => onAddToCart(product)}
+                      onClick={() => {
+                        const hasOptions = product.sizes.length > 0 || product.colors.length > 0 || product.variants.length > 0;
+                        if (hasOptions) {
+                          onSelectProduct(product);
+                        } else {
+                          onAddToCart(product);
+                        }
+                      }}
                       disabled={product.inventory === 0}
                       className={`mt-4 flex w-full items-center justify-center space-x-1.5 rounded-lg py-2.5 font-sans text-xs font-semibold shadow-sm transition-all ${
                         product.inventory === 0
@@ -445,7 +452,13 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
                       }`}
                     >
                       <ShoppingBag className="h-3.5 w-3.5" />
-                      <span>{product.inventory === 0 ? 'Sold Out' : 'Add to Cart'}</span>
+                      <span>
+                        {product.inventory === 0
+                          ? 'Sold Out'
+                          : product.sizes.length > 0 || product.colors.length > 0 || product.variants.length > 0
+                            ? 'Select Options'
+                            : 'Add to Cart'}
+                      </span>
                     </button>
                   </div>
                 </div>

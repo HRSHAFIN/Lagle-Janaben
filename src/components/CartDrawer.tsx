@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Percent } from 'lucide-react';
 import { CartItem, ShippingSettings } from '../types';
 import { computeOrderTotals } from '../lib/pricing';
+import { cartItemKey, formatSelectedOptions } from '../lib/cart';
 
 interface AppliedPromo {
   code: string;
@@ -12,8 +13,8 @@ interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  onUpdateQuantity: (productId: string, quantity: number) => void;
-  onRemoveItem: (productId: string) => void;
+  onUpdateQuantity: (cartKey: string, quantity: number) => void;
+  onRemoveItem: (cartKey: string) => void;
   onProceedToCheckout: () => void;
   appliedPromo: AppliedPromo | null;
   promoError: string;
@@ -144,8 +145,11 @@ export default function CartDrawer({
             ) : (
               // Items List
               <div className="divide-y divide-gray-100" id="cart-items-list">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex py-4 first:pt-0 last:pb-0" id={`cart-item-${item.product.id}`}>
+                {cart.map((item) => {
+                  const key = cartItemKey(item);
+                  const optionsLabel = formatSelectedOptions(item);
+                  return (
+                  <div key={key} className="flex py-4 first:pt-0 last:pb-0" id={`cart-item-${key}`}>
                     {/* Item Image */}
                     <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50">
                       <img
@@ -166,6 +170,9 @@ export default function CartDrawer({
                         <p className="mt-0.5 font-sans text-xs text-gray-400 font-medium">
                           {item.product.category}
                         </p>
+                        {optionsLabel && (
+                          <p className="mt-0.5 font-sans text-xs text-[#B88E4C] font-medium">{optionsLabel}</p>
+                        )}
                       </div>
 
                       {/* Quantity & Delete Actions */}
@@ -173,10 +180,10 @@ export default function CartDrawer({
                         {/* Selector */}
                         <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 px-1 py-0.5">
                           <button
-                            onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
+                            onClick={() => onUpdateQuantity(key, item.quantity - 1)}
                             className="p-1 rounded text-gray-500 hover:bg-white hover:text-gray-900 transition-colors disabled:opacity-50"
                             aria-label="Decrease quantity"
-                            id={`dec-qty-${item.product.id}`}
+                            id={`dec-qty-${key}`}
                           >
                             <Minus className="h-3 w-3" />
                           </button>
@@ -184,11 +191,11 @@ export default function CartDrawer({
                             {item.quantity}
                           </span>
                           <button
-                            onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+                            onClick={() => onUpdateQuantity(key, item.quantity + 1)}
                             disabled={item.quantity >= item.product.inventory}
                             className="p-1 rounded text-gray-500 hover:bg-white hover:text-gray-900 transition-colors disabled:opacity-50"
                             aria-label="Increase quantity"
-                            id={`inc-qty-${item.product.id}`}
+                            id={`inc-qty-${key}`}
                           >
                             <Plus className="h-3 w-3" />
                           </button>
@@ -197,9 +204,9 @@ export default function CartDrawer({
                         {/* Remove */}
                         <button
                           type="button"
-                          onClick={() => onRemoveItem(item.product.id)}
+                          onClick={() => onRemoveItem(key)}
                           className="flex items-center space-x-1 text-red-500 hover:text-red-700 font-medium transition-colors"
-                          id={`remove-item-${item.product.id}`}
+                          id={`remove-item-${key}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           <span>Remove</span>
@@ -207,7 +214,8 @@ export default function CartDrawer({
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

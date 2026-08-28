@@ -1,6 +1,15 @@
 import { insforge } from '../insforge';
 import { CartItem, Order, OrderItem } from '../../types';
 
+interface OrderJsonItem {
+  productId: string | null;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string;
+  selectedOptions?: { size?: string | null; color?: string | null; variant?: string | null } | null;
+}
+
 interface OrderJson {
   id: string;
   customerName: string;
@@ -13,7 +22,20 @@ interface OrderJson {
   paymentMethod: Order['paymentMethod'];
   paymentStatus: Order['paymentStatus'];
   createdAt: string;
-  items: OrderItem[];
+  items: OrderJsonItem[];
+}
+
+function mapOrderItemJson(item: OrderJsonItem): OrderItem {
+  return {
+    productId: item.productId,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    image: item.image,
+    size: item.selectedOptions?.size ?? null,
+    color: item.selectedOptions?.color ?? null,
+    variant: item.selectedOptions?.variant ?? null,
+  };
 }
 
 function mapOrderJson(json: OrderJson): Order {
@@ -22,7 +44,7 @@ function mapOrderJson(json: OrderJson): Order {
     customerName: json.customerName,
     customerEmail: json.customerEmail,
     shippingAddress: json.shippingAddress,
-    items: json.items ?? [],
+    items: (json.items ?? []).map(mapOrderItemJson),
     subtotal: Number(json.subtotal),
     discount: Number(json.discount),
     total: Number(json.total),
@@ -34,7 +56,13 @@ function mapOrderJson(json: OrderJson): Order {
 }
 
 function cartToItems(cart: CartItem[]) {
-  return cart.map((item) => ({ product_id: item.product.id, quantity: item.quantity }));
+  return cart.map((item) => ({
+    product_id: item.product.id,
+    quantity: item.quantity,
+    size: item.size ?? null,
+    color: item.color ?? null,
+    variant: item.variant ?? null,
+  }));
 }
 
 /** Cash on Delivery — recomputed, validated, and fulfilled atomically server-side. */
@@ -116,7 +144,14 @@ interface OrderRow {
   payment_method: Order['paymentMethod'];
   payment_status: Order['paymentStatus'];
   created_at: string;
-  order_items: { product_id: string | null; name: string; price: number | string; quantity: number; image: string | null }[];
+  order_items: {
+    product_id: string | null;
+    name: string;
+    price: number | string;
+    quantity: number;
+    image: string | null;
+    selected_options: { size?: string | null; color?: string | null; variant?: string | null } | null;
+  }[];
 }
 
 function mapOrderRow(row: OrderRow): Order {
@@ -131,6 +166,9 @@ function mapOrderRow(row: OrderRow): Order {
       price: Number(it.price),
       quantity: it.quantity,
       image: it.image ?? undefined,
+      size: it.selected_options?.size ?? null,
+      color: it.selected_options?.color ?? null,
+      variant: it.selected_options?.variant ?? null,
     })),
     subtotal: Number(row.subtotal),
     discount: Number(row.discount),
@@ -146,7 +184,7 @@ function mapOrderRow(row: OrderRow): Order {
 export async function fetchOrders(): Promise<Order[]> {
   const { data, error } = await insforge.database
     .from('orders')
-    .select('*, order_items(product_id, name, price, quantity, image)')
+    .select('*, order_items(product_id, name, price, quantity, image, selected_options)')
     .order('created_at', { ascending: false })
     .limit(500);
   if (error) throw new Error(error.message);
@@ -161,7 +199,7 @@ export async function fetchOrders(): Promise<Order[]> {
 export async function fetchMyOrders(userId: string): Promise<Order[]> {
   const { data, error } = await insforge.database
     .from('orders')
-    .select('*, order_items(product_id, name, price, quantity, image)')
+    .select('*, order_items(product_id, name, price, quantity, image, selected_options)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(500);

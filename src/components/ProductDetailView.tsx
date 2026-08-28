@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Product } from '../types';
-import { ArrowLeft, Star, ShoppingBag, CreditCard, ShieldCheck, Truck, RefreshCw, Gift } from 'lucide-react';
+import { Product, SelectedOptions } from '../types';
+import { ArrowLeft, Star, ShoppingBag, CreditCard, ShieldCheck, Truck, RefreshCw, Gift, Check } from 'lucide-react';
 
 interface ProductDetailViewProps {
   product: Product;
   allProducts: Product[];
-  onAddToCartWithQty: (product: Product, quantity: number) => void;
-  onInstantCheckout: (product: Product, quantity: number) => void;
+  onAddToCartWithQty: (product: Product, quantity: number, options?: SelectedOptions) => void;
+  onInstantCheckout: (product: Product, quantity: number, options?: SelectedOptions) => void;
   onBackToCatalog: () => void;
   onSelectProduct: (product: Product) => void;
 }
@@ -21,17 +21,29 @@ export default function ProductDetailView({
 }: ProductDetailViewProps) {
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'details' | 'specs' | 'shipping'>('details');
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
   // List of all images for the product
   const allImages = Array.from(new Set([product.image, ...(product.images || [])])).filter(Boolean);
   const [activeImage, setActiveImage] = useState(product.image);
 
-  // Reset quantity and active image when product changes
+  // Reset quantity, active image, and option selections when product changes
   useEffect(() => {
     setQuantity(1);
     setActiveImage(product.image);
+    setSelectedSize(null);
+    setSelectedColor(null);
+    setSelectedVariant(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
+
+  const needsSize = product.sizes.length > 0;
+  const needsColor = product.colors.length > 0;
+  const needsVariant = product.variants.length > 0;
+  const readyToBuy = (!needsSize || selectedSize) && (!needsColor || selectedColor) && (!needsVariant || selectedVariant);
+  const selectedOptions: SelectedOptions = { size: selectedSize, color: selectedColor, variant: selectedVariant };
 
   const handleIncrement = () => {
     if (quantity < product.inventory) {
@@ -259,6 +271,92 @@ export default function ProductDetailView({
               )}
             </div>
 
+            {/* Size / Color / Variant Selectors */}
+            {product.inventory > 0 && (needsSize || needsColor || needsVariant) && (
+              <div className="mt-8 space-y-5" id="product-options">
+                {needsSize && (
+                  <div>
+                    <span className="font-sans text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Size{selectedSize ? `: ${selectedSize}` : ''}
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {product.sizes.map((opt) => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          disabled={!opt.available}
+                          onClick={() => setSelectedSize(opt.label)}
+                          className={`rounded-lg border px-4 py-2 font-sans text-sm font-medium transition-all ${
+                            !opt.available
+                              ? 'cursor-not-allowed border-gray-100 text-gray-300 line-through'
+                              : selectedSize === opt.label
+                                ? 'border-[#1E2D44] bg-[#1E2D44] text-white'
+                                : 'border-gray-200 text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {needsColor && (
+                  <div>
+                    <span className="font-sans text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Color{selectedColor ? `: ${selectedColor}` : ''}
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-2.5">
+                      {product.colors.map((opt) => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          disabled={!opt.available}
+                          onClick={() => setSelectedColor(opt.label)}
+                          title={opt.available ? opt.label : `${opt.label} (unavailable)`}
+                          aria-label={opt.label}
+                          className={`relative h-9 w-9 rounded-full border-2 transition-all flex items-center justify-center ${
+                            !opt.available ? 'cursor-not-allowed opacity-30' : selectedColor === opt.label ? 'border-[#B88E4C]' : 'border-gray-200 hover:border-gray-400'
+                          }`}
+                          style={{ backgroundColor: opt.hex || '#e5e7eb' }}
+                        >
+                          {selectedColor === opt.label && <Check className="h-4 w-4 text-white drop-shadow" />}
+                          {!opt.available && <span className="absolute inset-0 rounded-full border-t border-gray-400 rotate-45" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {needsVariant && (
+                  <div>
+                    <span className="font-sans text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Variant{selectedVariant ? `: ${selectedVariant}` : ''}
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {product.variants.map((opt) => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          disabled={!opt.available}
+                          onClick={() => setSelectedVariant(opt.label)}
+                          className={`rounded-lg border px-4 py-2 font-sans text-sm font-medium transition-all ${
+                            !opt.available
+                              ? 'cursor-not-allowed border-gray-100 text-gray-300 line-through'
+                              : selectedVariant === opt.label
+                                ? 'border-[#1E2D44] bg-[#1E2D44] text-white'
+                                : 'border-gray-200 text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Buying Action Section */}
             {product.inventory > 0 && (
               <div className="mt-8 p-5 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-4">
@@ -297,8 +395,9 @@ export default function ProductDetailView({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                   {/* Add to Cart */}
                   <button
-                    onClick={() => onAddToCartWithQty(product, quantity)}
-                    className="flex w-full items-center justify-center space-x-2 rounded-xl border border-gray-300 bg-white py-3 font-sans text-sm font-bold text-gray-800 hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
+                    onClick={() => onAddToCartWithQty(product, quantity, selectedOptions)}
+                    disabled={!readyToBuy}
+                    className="flex w-full items-center justify-center space-x-2 rounded-xl border border-gray-300 bg-white py-3 font-sans text-sm font-bold text-gray-800 hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
                   >
                     <ShoppingBag className="h-4 w-4" />
                     <span>Add to Cart</span>
@@ -306,13 +405,17 @@ export default function ProductDetailView({
 
                   {/* Buy Now / Checkout instantly */}
                   <button
-                    onClick={() => onInstantCheckout(product, quantity)}
-                    className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#1E2D44] hover:bg-[#152031] text-white py-3 font-sans text-sm font-bold active:scale-[0.98] transition-all shadow"
+                    onClick={() => onInstantCheckout(product, quantity, selectedOptions)}
+                    disabled={!readyToBuy}
+                    className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#1E2D44] hover:bg-[#152031] text-white py-3 font-sans text-sm font-bold active:scale-[0.98] transition-all shadow disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#1E2D44]"
                   >
                     <CreditCard className="h-4 w-4" />
                     <span>Buy Now (Checkout)</span>
                   </button>
                 </div>
+                {!readyToBuy && (
+                  <p className="text-center font-sans text-xs text-amber-700">Please select {[needsSize && 'a size', needsColor && 'a color', needsVariant && 'a variant'].filter(Boolean).join(', ')} to continue.</p>
+                )}
               </div>
             )}
 
