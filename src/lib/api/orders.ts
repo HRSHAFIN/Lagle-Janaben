@@ -180,3 +180,9 @@ export async function cancelOwnOrder(orderId: string): Promise<Order> {
   if (error) throw new Error(error.message);
   return mapOrderJson(data as OrderJson);
 }
+
+/** Admin-only — RLS also enforces that only an already-Cancelled order can be deleted. */
+export async function deleteOrder(orderId: string): Promise<void> {
+  const { error } = await insforge.database.from('orders').delete().eq('id', orderId);
+  if (error) throw new Error(error.message);
+}

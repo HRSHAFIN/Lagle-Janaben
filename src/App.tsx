@@ -12,7 +12,7 @@ import Logo from './components/Logo';
 import MyOrdersView from './components/MyOrdersView';
 import { Mail, Phone, MapPin, Heart, ShieldCheck } from 'lucide-react';
 import { fetchProducts, createProduct, updateProduct, deleteProduct } from './lib/api/products';
-import { fetchOrders, fetchMyOrders, updateOrderStatus, cancelOwnOrder, placeCodOrder, createGatewayOrder, initiateSslcommerzPayment, getOrderById } from './lib/api/orders';
+import { fetchOrders, fetchMyOrders, updateOrderStatus, cancelOwnOrder, deleteOrder, placeCodOrder, createGatewayOrder, initiateSslcommerzPayment, getOrderById } from './lib/api/orders';
 import { SslcommerzDeliveryDetails } from './lib/api/orders';
 import { fetchCustomers, updateCustomerStatus } from './lib/api/customers';
 import { fetchAccounts } from './lib/api/accounts';
@@ -28,6 +28,7 @@ import {
   signInWithGoogle,
   signOut,
 } from './lib/api/auth';
+import { sendInvoiceEmail, sendCancellationEmail } from './lib/api/notifications';
 import { computeSubtotal } from './lib/pricing';
 
 interface AppliedPromo {
@@ -322,6 +323,7 @@ export default function App() {
   const handlePlaceCodOrder = async (data: { customerName: string; customerEmail: string; shippingAddress: string }): Promise<Order> => {
     const order = await placeCodOrder(cart, data.customerName, data.customerEmail, data.shippingAddress, appliedPromo?.code ?? null);
     applyLocalFulfillment(order);
+    sendInvoiceEmail(order).catch((err) => console.warn('Could not send invoice email:', err));
     return order;
   };
 
@@ -387,6 +389,7 @@ export default function App() {
     if (isAdmin) {
       setOrders((prev) => prev.map((o) => (o.id === orderId ? cancelled : o)));
     }
+    sendCancellationEmail(cancelled).catch((err) => console.warn('Could not send cancellation email:', err));
   };
 
   // --------------------------------------------------------
@@ -408,8 +411,18 @@ export default function App() {
   };
 
   const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
+    const previous = orders.find((o) => o.id === orderId);
     await updateOrderStatus(orderId, status);
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
+    const updated = { ...previous, status } as Order;
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+    if (status === 'Cancelled' && previous && previous.status !== 'Cancelled') {
+      sendCancellationEmail(updated).catch((err) => console.warn('Could not send cancellation email:', err));
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    await deleteOrder(orderId);
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
   };
 
   const handleUpdateCustomerStatus = async (customerId: string, status: Customer['status']) => {
@@ -534,6 +547,7 @@ export default function App() {
             onUpdateProduct={handleUpdateProduct}
             onDeleteProduct={handleDeleteProduct}
             onUpdateOrderStatus={handleUpdateOrderStatus}
+            onDeleteOrder={handleDeleteOrder}
             onUpdateCustomerStatus={handleUpdateCustomerStatus}
             onAddPromoCode={handleAddPromoCode}
             onDeletePromoCode={handleDeletePromoCode}

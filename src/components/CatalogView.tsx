@@ -23,7 +23,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
     search: '',
     category: 'All',
     minPrice: 0,
-    maxPrice: 500,
+    maxPrice: 5000,
     sortBy: 'featured',
   });
 
@@ -116,7 +116,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
       search: '',
       category: 'All',
       minPrice: 0,
-      maxPrice: 500,
+      maxPrice: 5000,
       sortBy: 'featured',
     });
   };
@@ -207,8 +207,8 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
               <input
                 type="range"
                 min="0"
-                max="500"
-                step="10"
+                max="5000"
+                step="50"
                 value={filters.maxPrice}
                 onChange={(e) => setFilters({ ...filters, maxPrice: parseInt(e.target.value) })}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-gray-100 accent-gray-900"
@@ -216,7 +216,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
               />
               <div className="mt-2 flex justify-between font-mono text-[10px] text-gray-400">
                 <span>৳0</span>
-                <span>৳500</span>
+                <span>৳5000</span>
               </div>
             </div>
 
@@ -324,8 +324,8 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
                 <input
                   type="range"
                   min="0"
-                  max="500"
-                  step="10"
+                  max="5000"
+                  step="50"
                   value={filters.maxPrice}
                   onChange={(e) => setFilters({ ...filters, maxPrice: parseInt(e.target.value) })}
                   className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-gray-100 accent-gray-900"

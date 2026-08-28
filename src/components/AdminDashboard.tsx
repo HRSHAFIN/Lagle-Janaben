@@ -35,6 +35,7 @@ interface AdminDashboardProps {
   onUpdateProduct: (product: Product) => Promise<void>;
   onDeleteProduct: (productId: string) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
+  onDeleteOrder: (orderId: string) => Promise<void>;
   onUpdateCustomerStatus: (customerId: string, status: Customer['status']) => Promise<void>;
   onAddPromoCode: (promo: Omit<PromoCode, 'id' | 'used_count' | 'created_at'>) => Promise<void>;
   onDeletePromoCode: (id: string) => Promise<void>;
@@ -306,6 +307,7 @@ export default function AdminDashboard({
   onUpdateProduct,
   onDeleteProduct,
   onUpdateOrderStatus,
+  onDeleteOrder,
   onUpdateCustomerStatus,
   onAddPromoCode,
   onDeletePromoCode,
@@ -413,6 +415,15 @@ export default function AdminDashboard({
       await onUpdateOrderStatus(orderId, status);
     } catch (err) {
       alert(errorMessage(err, 'Could not update order status.'));
+    }
+  };
+
+  const handleDeleteOrderClick = async (order: Order) => {
+    if (!confirm(`Permanently delete cancelled order ${shortId(order.id)}? This cannot be undone.`)) return;
+    try {
+      await onDeleteOrder(order.id);
+    } catch (err) {
+      alert(errorMessage(err, 'Could not delete this order.'));
     }
   };
 
@@ -940,7 +951,10 @@ export default function AdminDashboard({
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">
-                            {new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            <div>{new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                            <div className="font-mono text-xs text-gray-400">
+                              {new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </div>
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 font-mono font-semibold text-gray-900">৳{order.total.toFixed(2)}</td>
                           <td className="whitespace-nowrap px-6 py-4">
@@ -968,14 +982,26 @@ export default function AdminDashboard({
                             </select>
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 text-right">
-                            <button
-                              onClick={() => setSelectedOrderDetail(order)}
-                              className="flex items-center space-x-1 font-sans text-xs font-semibold text-gray-900 hover:text-gray-700 bg-gray-100 hover:bg-gray-200/80 px-2.5 py-1.5 rounded-lg transition-colors"
-                              id={`view-order-${order.id}`}
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              <span>View Details</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setSelectedOrderDetail(order)}
+                                className="flex items-center space-x-1 font-sans text-xs font-semibold text-gray-900 hover:text-gray-700 bg-gray-100 hover:bg-gray-200/80 px-2.5 py-1.5 rounded-lg transition-colors"
+                                id={`view-order-${order.id}`}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>View Details</span>
+                              </button>
+                              {order.status === 'Cancelled' && (
+                                <button
+                                  onClick={() => handleDeleteOrderClick(order)}
+                                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                  title="Permanently delete this cancelled order"
+                                  id={`delete-order-${order.id}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
