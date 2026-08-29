@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, ShoppingCart, Users, Package, Search, Plus,
   Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2,
-  AlertTriangle, Percent, Truck, Image, GripVertical, UserCog, ShieldCheck
+  AlertTriangle, Percent, Truck, Image, GripVertical, UserCog, ShieldCheck, Star
 } from 'lucide-react';
 import { Product, Order, Customer, Account, AdminTabType, PromoCode, ShippingSettings, HeroSlide, ProductOption } from '../types';
 import { CATEGORIES } from '../data';
@@ -337,6 +337,7 @@ export default function AdminDashboard({
     sizes: [] as ProductOption[],
     colors: [] as ProductOption[],
     variants: [] as ProductOption[],
+    featured: false,
   });
 
   // Orders tab states
@@ -499,7 +500,7 @@ export default function AdminDashboard({
         image: finalImage,
         images: newProduct.images.filter((url) => url.trim() !== ''),
         rating: 5.0,
-        featured: false,
+        featured: newProduct.featured,
         material: null,
         dimensions: null,
         sizes: newProduct.sizes.filter((o) => o.label.trim() !== ''),
@@ -519,6 +520,7 @@ export default function AdminDashboard({
         sizes: [],
         colors: [],
         variants: [],
+        featured: false,
       });
       setIsAddModalOpen(false);
     } catch (err) {
@@ -854,7 +856,10 @@ export default function AdminDashboard({
                               className="h-10 w-10 rounded-lg object-cover border border-gray-100 bg-gray-50"
                             />
                             <div className="ml-4 max-w-[160px]">
-                              <p className="font-sans font-semibold text-gray-900 truncate">{product.name}</p>
+                              <p className="font-sans font-semibold text-gray-900 truncate flex items-center gap-1">
+                                {product.featured && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Featured" />}
+                                <span className="truncate">{product.name}</span>
+                              </p>
                               <p className="font-mono text-xs text-gray-400" title={product.id}>ID: {shortId(product.id)}</p>
                             </div>
                           </div>
@@ -1488,6 +1493,17 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              <label htmlFor="new-prod-featured" className="flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2.5 cursor-pointer">
+                <input
+                  id="new-prod-featured"
+                  type="checkbox"
+                  checked={newProduct.featured}
+                  onChange={(e) => setNewProduct({ ...newProduct, featured: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                />
+                <span className="font-sans text-sm text-gray-700">Feature this product on the storefront</span>
+              </label>
+
               <div>
                 <label htmlFor="new-prod-image" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Custom Image URL (Optional)</label>
                 <input
@@ -1674,6 +1690,17 @@ export default function AdminDashboard({
                   </select>
                 </div>
               </div>
+
+              <label htmlFor="edit-prod-featured" className="flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2.5 cursor-pointer">
+                <input
+                  id="edit-prod-featured"
+                  type="checkbox"
+                  checked={editingProduct.featured}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, featured: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                />
+                <span className="font-sans text-sm text-gray-700">Feature this product on the storefront</span>
+              </label>
 
               <div>
                 <label htmlFor="edit-prod-image" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Product Image URL</label>
