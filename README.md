@@ -20,6 +20,20 @@
   <em>Responsive mobile layout</em>
 </p>
 
+### Admin Dashboard
+
+![Admin overview with revenue, order, and catalog stats](docs/screenshots/admin-overview.png)
+
+| Products | Orders |
+|:---:|:---:|
+| ![Product management table with stock levels and featured tags](docs/screenshots/admin-products.png) | ![Order management with inline status changes](docs/screenshots/admin-orders.png) |
+| **Customers** | **Accounts** |
+| ![Customer profiles with order count and total spent](docs/screenshots/admin-customers.png) | ![Registered accounts directory with roles](docs/screenshots/admin-accounts.png) |
+| **Promo Codes** | **Shipping** |
+| ![Promo code management](docs/screenshots/admin-promos.png) | ![Shipping fee and free-shipping threshold settings](docs/screenshots/admin-shipping.png) |
+| **Hero Slider** | |
+| ![Hero slider image management](docs/screenshots/admin-hero-slider.png) | |
+
 ## Architecture
 
 The frontend is a static React SPA that talks directly to [InsForge](https://insforge.dev) over its SDK — there is no custom backend server. Every write that touches money (pricing, inventory, promo redemption) happens inside Postgres functions, never trusted from the browser.
