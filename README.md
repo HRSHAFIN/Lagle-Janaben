@@ -4,6 +4,22 @@
 
 **🔗 Live demo: [tup5n9bf.insforge.site](https://tup5n9bf.insforge.site)**
 
+![Lagle Janaben storefront](docs/screenshots/home.png)
+
+## Screenshots
+
+| Catalog | Product Detail |
+|:---:|:---:|
+| ![Product catalog with search, category, and price filters](docs/screenshots/catalog.png) | ![Product detail page with gallery, options, and gift-wrap info](docs/screenshots/product.png) |
+| **Cart** | **Checkout** |
+| ![Slide-over cart with promo codes and free-shipping progress](docs/screenshots/cart.png) | ![Checkout with contact, shipping address, and payment method](docs/screenshots/checkout.png) |
+
+<p align="center">
+  <img src="docs/screenshots/mobile.png" alt="Mobile view of the storefront" width="300">
+  <br>
+  <em>Responsive mobile layout</em>
+</p>
+
 ## Architecture
 
 The frontend is a static React SPA that talks directly to [InsForge](https://insforge.dev) over its SDK — there is no custom backend server. Every write that touches money (pricing, inventory, promo redemption) happens inside Postgres functions, never trusted from the browser.
@@ -61,6 +77,7 @@ Lagle-Janaben/
 │   └── sslcommerz-callback.ts    # Validates & fulfills success/fail/cancel/IPN
 ├── migrations/                   # Versioned SQL — schema, RLS policies, RPCs
 ├── assets/.aistudio/             # AI Studio managed assets
+├── docs/screenshots/             # README preview images
 ├── src/                          # React + TypeScript frontend
 │   ├── main.tsx                  # React root mount
 │   ├── App.tsx                   # Main app — routing, state, auth, cart, admin
