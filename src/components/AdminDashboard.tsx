@@ -1035,14 +1035,6 @@ export default function AdminDashboard({
                                 <Eye className="h-3.5 w-3.5" />
                                 <span>View Details</span>
                               </button>
-                              <button
-                                onClick={() => setInvoiceOrder(order)}
-                                className="flex items-center space-x-1 font-sans text-xs font-semibold text-[#1E2D44] hover:text-[#16233a] bg-[#B88E4C]/10 hover:bg-[#B88E4C]/20 px-2.5 py-1.5 rounded-lg transition-colors"
-                                id={`invoice-order-${order.id}`}
-                              >
-                                <FileText className="h-3.5 w-3.5" />
-                                <span>Invoice</span>
-                              </button>
                               {order.status === 'Cancelled' && (
                                 <button
                                   onClick={() => handleDeleteOrderClick(order)}
