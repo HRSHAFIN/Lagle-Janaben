@@ -974,8 +974,15 @@ export default function AdminDashboard({
                       })
                       .map((order) => (
                         <tr key={order.id} className="hover:bg-gray-50/50" id={`order-row-${order.id}`}>
-                          <td className="whitespace-nowrap px-6 py-4 font-mono font-bold text-gray-900" title={order.id}>
-                            {shortId(order.id)}
+                          <td className="whitespace-nowrap px-6 py-4">
+                            <button
+                              onClick={() => setInvoiceOrder(order)}
+                              className="font-mono font-bold text-gray-900 underline decoration-gray-300 underline-offset-4 hover:text-[#B88E4C] hover:decoration-[#B88E4C]"
+                              title={`View invoice for ${order.id}`}
+                              id={`order-id-invoice-${order.id}`}
+                            >
+                              {shortId(order.id)}
+                            </button>
                           </td>
                           <td className="whitespace-nowrap px-6 py-4">
                             <div>
@@ -1816,7 +1823,13 @@ export default function AdminDashboard({
               <div className="flex items-center justify-between px-4 py-5 sm:px-6 border-b border-gray-100">
                 <div>
                   <span className="font-sans text-xs uppercase tracking-wider text-gray-400 font-semibold">Order Details</span>
-                  <h2 className="font-mono text-sm font-bold text-gray-900" title={selectedOrderDetail.id}>{shortId(selectedOrderDetail.id)}</h2>
+                  <button
+                    onClick={() => setInvoiceOrder(selectedOrderDetail)}
+                    className="block font-mono text-sm font-bold text-gray-900 underline decoration-gray-300 underline-offset-4 hover:text-[#B88E4C] hover:decoration-[#B88E4C]"
+                    title="View invoice"
+                  >
+                    {shortId(selectedOrderDetail.id)}
+                  </button>
                 </div>
                 <button onClick={() => setSelectedOrderDetail(null)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-50">
                   <X className="h-5 w-5" />
