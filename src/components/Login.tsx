@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import Logo from './Logo';
+import ForgotPassword from './ForgotPassword';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => Promise<string | null>;
+  onRequestPasswordReset: (email: string) => Promise<string | null>;
+  onResetPassword: (email: string, code: string, newPassword: string) => Promise<string | null>;
   onNavigateRegister: () => void;
   onBackToCatalog: () => void;
 }
 
-export default function Login({ onLogin, onNavigateRegister, onBackToCatalog }: LoginProps) {
+export default function Login({ onLogin, onRequestPasswordReset, onResetPassword, onNavigateRegister, onBackToCatalog }: LoginProps) {
+  const [mode, setMode] = useState<'login' | 'forgot'>('login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -77,6 +81,15 @@ export default function Login({ onLogin, onNavigateRegister, onBackToCatalog }: 
         </button>
 
         <div className="mx-auto w-full max-w-sm">
+          {mode === 'forgot' ? (
+            <ForgotPassword
+              initialEmail={identifier.trim()}
+              onRequestCode={onRequestPasswordReset}
+              onResetPassword={onResetPassword}
+              onBackToLogin={() => setMode('login')}
+            />
+          ) : (
+          <>
           <h2 className="font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">Sign in</h2>
           <p className="mt-2 font-sans text-sm text-gray-500">
             New to Lagle Janaben?{' '}
@@ -112,9 +125,22 @@ export default function Login({ onLogin, onNavigateRegister, onBackToCatalog }: 
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-1.5 block font-sans text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Password
-              </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label htmlFor="password" className="block font-sans text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setMode('forgot');
+                  }}
+                  className="font-sans text-xs font-semibold text-[#B88E4C] hover:underline"
+                  id="forgot-password-link"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
@@ -147,6 +173,8 @@ export default function Login({ onLogin, onNavigateRegister, onBackToCatalog }: 
               {isSubmitting ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
+          </>
+          )}
         </div>
       </div>
     </div>

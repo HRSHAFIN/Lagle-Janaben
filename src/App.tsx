@@ -25,6 +25,8 @@ import {
   signUp,
   verifySignUpCode,
   resendSignUpCode,
+  requestPasswordReset,
+  resetPasswordWithCode,
   syncMyProfile,
   signOut,
 } from './lib/api/auth';
@@ -151,6 +153,16 @@ export default function App() {
 
   const handleResendCode = async (email: string) => {
     await resendSignUpCode(email);
+  };
+
+  const handleResetPassword = async (email: string, code: string, newPassword: string): Promise<string | null> => {
+    const { user, error } = await resetPasswordWithCode(email, code, newPassword);
+    if (error) return error;
+    if (user) syncMyProfile(user.name, user.email).catch(() => {});
+    setCurrentUser(user);
+    setCurrentView('catalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return null;
   };
 
   const handleLogout = async () => {
@@ -506,6 +518,8 @@ export default function App() {
         {currentView === 'login' && !authLoading && (
           <Login
             onLogin={handleLogin}
+            onRequestPasswordReset={requestPasswordReset}
+            onResetPassword={handleResetPassword}
             onNavigateRegister={() => setCurrentView('register')}
             onBackToCatalog={() => setCurrentView('catalog')}
           />

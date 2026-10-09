@@ -249,6 +249,11 @@ otp_expiry = 3600
 subject = "Your Lagle Janaben verification code"
 content_path = "./supabase/templates/confirmation.html"
 
+# "Forgot password" also uses a 6-digit code, entered on the Login page.
+[auth.email.template.recovery]
+subject = "Your Lagle Janaben password reset code"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

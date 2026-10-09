@@ -75,6 +75,30 @@ export async function resendSignUpCode(email: string): Promise<void> {
   await supabase.auth.resend({ type: 'signup', email });
 }
 
+/**
+ * Emails a 6-digit reset code. Succeeds even for unknown addresses, so the
+ * form can't be used to probe which emails have accounts.
+ */
+export async function requestPasswordReset(email: string): Promise<string | null> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  return error ? error.message : null;
+}
+
+/** Verifies the emailed code, sets the new password, and leaves the user signed in. */
+export async function resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<SignInResult> {
+  const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'recovery' });
+  if (error || !data.user) return { user: null, error: error?.message || 'Invalid or expired code.' };
+
+  const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+  if (updateError) {
+    // The code created a session; don't leave the user half signed in without the new password.
+    await supabase.auth.signOut();
+    return { user: null, error: `${updateError.message} Please request a new code and try again.` };
+  }
+  const role = await resolveRole(data.user.id);
+  return { user: toUser(data.user, role), error: null };
+}
+
 /** Keeps the public.profiles directory row in sync so admins can see registered accounts. */
 export async function syncMyProfile(name: string, email: string, phone?: string | null): Promise<void> {
   try {

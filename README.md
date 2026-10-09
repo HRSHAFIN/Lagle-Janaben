@@ -93,7 +93,7 @@ Lagle-Janaben/
 ├── supabase/
 │   ├── config.toml               # Supabase CLI config (auth, edge function JWT settings)
 │   ├── migrations/               # Versioned SQL — schema, RLS policies, RPCs, grants
-│   ├── templates/                # Auth email templates (sign-up verification code)
+│   ├── templates/                # Auth email templates (sign-up + password reset codes)
 │   └── functions/                # Edge functions (Deno)
 │       ├── _shared/              # CORS/service-role client + order email templates & SMTP sender
 │       ├── sslcommerz-initiate/  # Starts a payment session for a pending order
@@ -121,7 +121,8 @@ Lagle-Janaben/
 │       ├── CheckoutView.tsx      # Checkout — COD & SSLCommerz
 │       ├── MyOrdersView.tsx      # Signed-in order history + self-cancel with live countdown
 │       ├── GoogleAuthButton.tsx  # Google OAuth button (not shown while Google sign-in is off)
-│       ├── Login.tsx             # Login form
+│       ├── ForgotPassword.tsx    # Password reset with an emailed 6-digit code
+│       ├── Login.tsx             # Login form (+ "Forgot password?")
 │       ├── Logo.tsx              # SVG logo component
 │       ├── Navbar.tsx            # Sticky header, admin-gated nav, cart badge, user menu
 │       ├── ProductDetailView.tsx # Product detail with gallery, add-to-cart
@@ -141,7 +142,7 @@ Lagle-Janaben/
 - **Shopping Cart** — Slide-over drawer, quantity controls, promo codes, real-time totals
 - **Checkout** — Cash on Delivery today; SSLCommerz (cards, bKash, Nagad, Rocket) wired up and ready, shown as "Coming Soon" until live merchant credentials are configured
 - **My Orders** — Signed-in customers see their own order history and can self-cancel a Pending/Processing order within 2 hours, with a live countdown
-- **Authentication** — Email/password with email verification via Supabase Auth; email and a Bangladeshi phone number are required at sign-up (enforced by a database trigger, not just the form)
+- **Authentication** — Email/password with email verification via Supabase Auth; email and a Bangladeshi phone number are required at sign-up (enforced by a database trigger, not just the form); "Forgot password?" emails a 6-digit reset code
 - **Admin Dashboard** — 8-tab panel: Overview, Products, Orders, Customers, Accounts, Promo Codes, Shipping, Hero Slider (role-gated)
 - **Accounts directory** — Admins can see every registered account, not just people who've ordered
 - **CRM** — Server-maintained customer profiles (order count & total spent), never client-written
@@ -176,7 +177,7 @@ Plus Supabase's built-in `auth.users`. See [`supabase/migrations/`](supabase/mig
      SMTP_USER=you@gmail.com SMTP_PASS="your app password" \
      SSLCOMMERZ_STORE_ID=... SSLCOMMERZ_STORE_PASSWORD=... SSLCOMMERZ_IS_SANDBOX=true
    ```
-6. In the Supabase dashboard → Authentication: set the Site URL and redirect URLs to your site, add Gmail as custom SMTP (`smtp.gmail.com`, port 465, your address + App Password), paste [`supabase/templates/confirmation.html`](supabase/templates/confirmation.html) as the "Confirm signup" template (it sends a 6-digit code)
+6. In the Supabase dashboard → Authentication: set the Site URL and redirect URLs to your site, add Gmail as custom SMTP (`smtp.gmail.com`, port 465, your address + App Password), paste [`supabase/templates/confirmation.html`](supabase/templates/confirmation.html) as the "Confirm signup" template and [`recovery.html`](supabase/templates/recovery.html) as "Reset password" (both send 6-digit codes)
 7. Promote your admin account: after signing up once in the app, set `role = 'admin'` on your row in `profiles` (SQL editor)
 8. Run `npm run dev` for development
 

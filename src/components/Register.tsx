@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Check, Eye, EyeOff, Gift, Lock, Mail, Phone, ShieldCheck, User as UserIcon } from 'lucide-react';
 import Logo from './Logo';
-import { isValidBdPhone, isValidEmail } from '../lib/validation';
+import { getPasswordChecks, isValidBdPhone, isValidEmail, PASSWORD_RULES } from '../lib/validation';
 
 interface RegisterProps {
   onRegister: (data: { name: string; email: string; phone: string; password: string }) => Promise<{
@@ -12,15 +12,6 @@ interface RegisterProps {
   onResendCode: (email: string) => Promise<void>;
   onNavigateLogin: () => void;
   onBackToCatalog: () => void;
-}
-
-function getPasswordChecks(password: string) {
-  return {
-    length: password.length >= 8,
-    upper: /[A-Z]/.test(password),
-    lower: /[a-z]/.test(password),
-    number: /[0-9]/.test(password),
-  };
 }
 
 export default function Register({ onRegister, onVerifyCode, onResendCode, onNavigateLogin, onBackToCatalog }: RegisterProps) {
@@ -329,13 +320,8 @@ export default function Register({ onRegister, onVerifyCode, onResendCode, onNav
               {/* Live password requirement checklist */}
               {formData.password.length > 0 && (
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-                  {[
-                    { key: 'length', label: '8+ characters' },
-                    { key: 'upper', label: '1 uppercase letter' },
-                    { key: 'lower', label: '1 lowercase letter' },
-                    { key: 'number', label: '1 number' },
-                  ].map((rule) => {
-                    const ok = passwordChecks[rule.key as keyof typeof passwordChecks];
+                  {PASSWORD_RULES.map((rule) => {
+                    const ok = passwordChecks[rule.key];
                     return (
                       <div key={rule.key} className={`flex items-center space-x-1.5 font-sans text-[11px] ${ok ? 'text-emerald-600' : 'text-gray-400'}`}>
                         <Check className={`h-3 w-3 flex-shrink-0 ${ok ? 'opacity-100' : 'opacity-30'}`} />
