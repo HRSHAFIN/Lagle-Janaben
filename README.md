@@ -41,41 +41,29 @@ The frontend is a static React SPA that talks directly to [Supabase](https://sup
 ```mermaid
 flowchart LR
     subgraph Browser["Browser — React 19 SPA"]
-        UI["Catalog · Cart · Checkout
-Account · Admin Dashboard"]
+        UI["Catalog · Cart · Checkout<br/>Account · Admin Dashboard"]
     end
 
     subgraph Supabase["Supabase Backend"]
-        Auth["Auth
-email+password · Google OAuth"]
-        DB[("Postgres
-RLS policies + RPCs")]
-        Storage[("Storage
-product & hero images")]
-        Functions["Edge Functions (Deno)
-sslcommerz-initiate
-sslcommerz-callback
-send-order-email"]
+        Auth["Auth<br/>email+password · Google OAuth"]
+        DB[("Postgres<br/>RLS policies + RPCs")]
+        Storage[("Storage<br/>product & hero images")]
+        Functions["Edge Functions (Deno)<br/>sslcommerz-initiate<br/>sslcommerz-callback<br/>send-order-email"]
     end
 
-    Gateway[["SSLCommerz
-Payment Gateway"]]
-    Resend[["Resend
-order & sign-up email"]]
-    Vercel["Vercel
-(static hosting for this SPA)"]
+    Gateway[["SSLCommerz<br/>Payment Gateway"]]
+    Mail[["Gmail SMTP<br/>order & sign-up email"]]
+    Vercel["Vercel<br/>(static hosting for this SPA)"]
 
     UI -- "auth" --> Auth
     UI -- "CRUD + RPC" --> DB
     UI -- "upload/serve" --> Storage
     UI -- "invoke" --> Functions
     Functions -- "initiate payment" --> Gateway
-    Gateway -- "callback (validated
-server-to-server)" --> Functions
-    Functions -- "fulfill order
-(service-role RPC)" --> DB
-    Functions -- "send" --> Resend
-    Auth -- "SMTP" --> Resend
+    Gateway -- "callback (validated<br/>server-to-server)" --> Functions
+    Functions -- "fulfill order<br/>(service-role RPC)" --> DB
+    Functions -- "send" --> Mail
+    Auth -- "SMTP" --> Mail
     Vercel -. serves .-> Browser
 ```
 
@@ -83,7 +71,7 @@ server-to-server)" --> Functions
 - **No app server to run or patch.** The SPA is static; Supabase is the entire backend.
 - **Row Level Security everywhere.** Every table enforces who can read/write which rows at the database layer, not in application code — see [`supabase/migrations/`](supabase/migrations/).
 - **Money never trusts the client.** Cart prices, promo discounts, shipping, and inventory are recomputed inside Postgres RPCs (`place_order`, `create_pending_gateway_order`, `fulfill_gateway_order`, `cancel_own_order`) — the browser only ever sends product IDs and quantities. Internal RPCs like `fulfill_gateway_order` can only be called with the service-role key, from the edge functions.
-- **Secrets never reach the browser.** The SSLCommerz store password and the Resend API key live only in Supabase's edge function secrets, read by the functions in [`supabase/functions/`](supabase/functions/).
+- **Secrets never reach the browser.** The SSLCommerz store password and the Gmail App Password live only in Supabase's edge function secrets, read by the functions in [`supabase/functions/`](supabase/functions/).
 
 ## Tech Stack
 
@@ -95,7 +83,7 @@ server-to-server)" --> Functions
 | **Database** | Postgres 17 (Supabase-managed), Row Level Security on every table |
 | **Payment Gateway** | SSLCommerz (Bangladesh), via a Supabase edge function |
 | **Authentication** | Supabase Auth — email/password (with 6-digit email code) + Google OAuth |
-| **Email** | [Resend](https://resend.com) — order emails via an edge function, sign-up codes via SMTP |
+| **Email** | Gmail SMTP (App Password) — order emails via an edge function, sign-up codes via Supabase Auth |
 | **Hosting** | Vercel |
 
 ## Project Structure
@@ -107,7 +95,7 @@ Lagle-Janaben/
 │   ├── migrations/               # Versioned SQL — schema, RLS policies, RPCs, grants
 │   ├── templates/                # Auth email templates (sign-up verification code)
 │   └── functions/                # Edge functions (Deno)
-│       ├── _shared/              # CORS/service-role client + order email templates & Resend sender
+│       ├── _shared/              # CORS/service-role client + order email templates & SMTP sender
 │       ├── sslcommerz-initiate/  # Starts a payment session for a pending order
 │       ├── sslcommerz-callback/  # Validates & fulfills success/fail/cancel/IPN
 │       └── send-order-email/     # Order confirmation / cancellation emails
@@ -172,7 +160,7 @@ Plus Supabase's built-in `auth.users`. See [`supabase/migrations/`](supabase/mig
 
 - Node.js 22+
 - A [Supabase](https://supabase.com) project and the CLI (`npx supabase login`, then `npx supabase link --project-ref <ref>`)
-- A [Resend](https://resend.com) API key and verified sending domain (order emails and sign-up codes)
+- A Gmail account with 2-Step Verification and an [App Password](https://myaccount.google.com/apppasswords) (order emails and sign-up codes)
 - A Google OAuth client ID/secret, if you want Google sign-in
 - SSLCommerz sandbox or live store credentials (optional — Cash on Delivery works without them)
 
@@ -184,9 +172,11 @@ Plus Supabase's built-in `auth.users`. See [`supabase/migrations/`](supabase/mig
 4. Deploy the edge functions: `npx supabase functions deploy` (JWT verification is off per `supabase/config.toml`; each function does its own checks)
 5. Set edge function secrets:
    ```bash
-   npx supabase secrets set SITE_URL=https://your-site.vercel.app      RESEND_API_KEY=re_... EMAIL_FROM="Lagle Janaben <orders@your-domain.com>"      SSLCOMMERZ_STORE_ID=... SSLCOMMERZ_STORE_PASSWORD=... SSLCOMMERZ_IS_SANDBOX=true
+   npx supabase secrets set SITE_URL=https://your-site.vercel.app \
+     SMTP_USER=you@gmail.com SMTP_PASS="your app password" \
+     SSLCOMMERZ_STORE_ID=... SSLCOMMERZ_STORE_PASSWORD=... SSLCOMMERZ_IS_SANDBOX=true
    ```
-6. In the Supabase dashboard → Authentication: set the Site URL and redirect URLs to your site, add Resend as custom SMTP, paste [`supabase/templates/confirmation.html`](supabase/templates/confirmation.html) as the "Confirm signup" template (it sends a 6-digit code), and enable the Google provider
+6. In the Supabase dashboard → Authentication: set the Site URL and redirect URLs to your site, add Gmail as custom SMTP (`smtp.gmail.com`, port 465, your address + App Password), paste [`supabase/templates/confirmation.html`](supabase/templates/confirmation.html) as the "Confirm signup" template (it sends a 6-digit code), and enable the Google provider
 7. Promote your admin account: after signing up once in the app, set `role = 'admin'` on your row in `profiles` (SQL editor)
 8. Run `npm run dev` for development
 

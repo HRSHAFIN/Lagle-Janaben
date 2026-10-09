@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 import { Order } from '../../types';
 
-// The templates and the Resend API key live in the send-order-email edge
+// The templates and the SMTP credentials live in the send-order-email edge
 // function (supabase/functions/_shared/email.ts). The browser only names the
 // order; the function loads it server-side and checks it's in the right state.
 

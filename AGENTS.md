@@ -2,12 +2,12 @@
 
 ## Supabase backend
 
-This project uses [Supabase](https://supabase.com) for its database (Postgres), authentication, file storage and edge functions. The site is hosted on Vercel; order and sign-up emails go through Resend.
+This project uses [Supabase](https://supabase.com) for its database (Postgres), authentication, file storage and edge functions. The site is hosted on Vercel; order and sign-up emails go through Gmail SMTP (App Password, port 465).
 
 - **Project:** **Lagle Janaben** (ref `cjbbbssijasbujsbsast`, API base `https://cjbbbssijasbujsbsast.supabase.co`)
 - **Schema:** versioned SQL in `supabase/migrations/`. Apply with `npx supabase db push`; never edit an applied migration, add a new one.
 - **Edge functions:** `supabase/functions/<name>/index.ts`, deployed with `npx supabase functions deploy`. JWT verification is off for all of them (`supabase/config.toml`), so each function validates its own input.
-- **Credentials:** app code reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from `.env.local`. Server secrets (`RESEND_API_KEY`, `EMAIL_FROM`, `SITE_URL`, `SSLCOMMERZ_*`) are edge function secrets (`npx supabase secrets set`). Never hardcode or commit keys.
+- **Credentials:** app code reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from `.env.local`. Server secrets (`SMTP_USER`, `SMTP_PASS`, `SITE_URL`, `SSLCOMMERZ_*`) are edge function secrets (`npx supabase secrets set`). Never hardcode or commit keys.
 
 Key patterns:
 

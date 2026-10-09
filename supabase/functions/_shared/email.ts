@@ -1,5 +1,7 @@
-// Order email templates + Resend delivery, shared by send-order-email and
-// sslcommerz-callback. Server-only: RESEND_API_KEY never reaches the browser.
+// Order email templates + SMTP delivery, shared by send-order-email and
+// sslcommerz-callback. Server-only: the SMTP password never reaches the browser.
+
+import nodemailer from 'npm:nodemailer@6';
 
 export interface OrderJson {
   id: string;
@@ -15,8 +17,6 @@ export interface OrderJson {
   createdAt: string;
   items: { name: string; price: number; quantity: number }[];
 }
-
-const SUPPORT_EMAIL = 'support@laglejanaben.com';
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -126,15 +126,23 @@ export function cancellationEmail(order: OrderJson): { subject: string; html: st
   };
 }
 
+// Gmail SMTP on port 465 (implicit TLS) — Supabase blocks outbound 25/587.
+// SMTP_PASS is a Google App Password, not the account password.
 export async function sendEmail(to: string, email: { subject: string; html: string }): Promise<void> {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  const from = Deno.env.get('EMAIL_FROM');
-  if (!apiKey || !from) throw new Error('Email is not configured (RESEND_API_KEY / EMAIL_FROM)');
+  const user = Deno.env.get('SMTP_USER');
+  const pass = Deno.env.get('SMTP_PASS');
+  if (!user || !pass) throw new Error('Email is not configured (SMTP_USER / SMTP_PASS)');
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to: [to], reply_to: SUPPORT_EMAIL, subject: email.subject, html: email.html }),
+  const transport = nodemailer.createTransport({
+    host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user, pass },
   });
-  if (!res.ok) throw new Error(`Resend error ${res.status}: ${await res.text()}`);
+  await transport.sendMail({
+    from: `Lagle Janaben <${user}>`,
+    to,
+    subject: email.subject,
+    html: email.html,
+  });
 }
