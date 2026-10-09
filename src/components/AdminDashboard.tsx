@@ -745,13 +745,15 @@ export default function AdminDashboard({
                     {chartData.map((data, idx) => {
                       const barHeightPercent = Math.max((data.revenue / maxRevenueInChart) * 100, 3);
                       return (
-                        <div key={idx} className="flex flex-col items-center flex-1 group">
-                          <div className="relative mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 rounded bg-gray-900 px-2 py-0.5 font-mono text-[10px] font-medium text-white shadow-lg whitespace-nowrap">
-                              ৳{data.revenue.toFixed(2)}
-                            </span>
+                        <div key={idx} className="flex flex-col items-center flex-1 h-full group">
+                          {/* Bar area fills the column above the label, so the % height has a definite parent to resolve against. */}
+                          <div className="flex-1 w-full flex items-end justify-center">
+                            <div style={{ height: `${barHeightPercent}%` }} className="relative w-8 rounded-t bg-gray-900 hover:bg-gray-700 transition-all duration-500 shadow-sm">
+                              <span className="absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 rounded bg-gray-900 px-2 py-0.5 font-mono text-[10px] font-medium text-white shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                ৳{data.revenue.toFixed(2)}
+                              </span>
+                            </div>
                           </div>
-                          <div style={{ height: `${barHeightPercent}%` }} className="w-8 rounded-t bg-gray-900 hover:bg-gray-700 transition-all duration-500 shadow-sm" />
                           <span className="mt-2 font-sans text-[10px] font-medium text-gray-500 truncate max-w-[65px] px-0.5">{data.category}</span>
                         </div>
                       );
