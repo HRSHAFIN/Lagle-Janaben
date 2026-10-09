@@ -1,8 +1,8 @@
-import { insforge } from '../insforge';
+import { supabase } from '../supabase';
 import { PromoCode } from '../../types';
 
 export async function fetchPromoCodes(): Promise<PromoCode[]> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('promo_codes')
     .select()
     .order('created_at', { ascending: false });
@@ -13,7 +13,7 @@ export async function fetchPromoCodes(): Promise<PromoCode[]> {
 export async function createPromoCode(
   promo: Omit<PromoCode, 'id' | 'used_count' | 'created_at'>
 ): Promise<PromoCode> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('promo_codes')
     .insert([
       {
@@ -32,7 +32,7 @@ export async function createPromoCode(
 }
 
 export async function deletePromoCode(id: string): Promise<void> {
-  const { error } = await insforge.database.from('promo_codes').delete().eq('id', id);
+  const { error } = await supabase.from('promo_codes').delete().eq('id', id);
   if (error) throw new Error(error.message);
 }
 
@@ -44,7 +44,7 @@ export interface PromoValidation {
 }
 
 export async function validatePromo(code: string, subtotal: number): Promise<PromoValidation> {
-  const { data, error } = await insforge.database.rpc('validate_promo', {
+  const { data, error } = await supabase.rpc('validate_promo', {
     p_code: code,
     p_subtotal: subtotal,
   });

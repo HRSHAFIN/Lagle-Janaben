@@ -37,7 +37,7 @@ export default function CatalogView({ products, onAddToCart, onSelectProduct }: 
     setVisibleCount(6);
   }, [filters]);
 
-  // Fetch hero slides from InsForge
+  // Fetch hero slides from Supabase
   useEffect(() => {
     let cancelled = false;
     fetchHeroSlides()

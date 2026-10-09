@@ -36,39 +36,54 @@
 
 ## Architecture
 
-The frontend is a static React SPA that talks directly to [InsForge](https://insforge.dev) over its SDK — there is no custom backend server. Every write that touches money (pricing, inventory, promo redemption) happens inside Postgres functions, never trusted from the browser.
+The frontend is a static React SPA that talks directly to [Supabase](https://supabase.com) over `@supabase/supabase-js` — there is no custom backend server. Every write that touches money (pricing, inventory, promo redemption) happens inside Postgres functions, never trusted from the browser.
 
 ```mermaid
 flowchart LR
     subgraph Browser["Browser — React 19 SPA"]
-        UI["Catalog · Cart · Checkout\nAccount · Admin Dashboard"]
+        UI["Catalog · Cart · Checkout
+Account · Admin Dashboard"]
     end
 
-    subgraph InsForge["InsForge Backend"]
-        Auth["Auth\nemail+password · Google OAuth"]
-        DB[("Postgres\nRLS policies + RPCs")]
-        Storage[("Storage\nproduct & hero images")]
-        Functions["Edge Functions (Deno)\nsslcommerz-initiate\nsslcommerz-callback"]
+    subgraph Supabase["Supabase Backend"]
+        Auth["Auth
+email+password · Google OAuth"]
+        DB[("Postgres
+RLS policies + RPCs")]
+        Storage[("Storage
+product & hero images")]
+        Functions["Edge Functions (Deno)
+sslcommerz-initiate
+sslcommerz-callback
+send-order-email"]
     end
 
-    Gateway[["SSLCommerz\nPayment Gateway"]]
-    Sites["InsForge Sites\n(static hosting for this SPA)"]
+    Gateway[["SSLCommerz
+Payment Gateway"]]
+    Resend[["Resend
+order & sign-up email"]]
+    Vercel["Vercel
+(static hosting for this SPA)"]
 
-    UI -- "SDK: auth" --> Auth
-    UI -- "SDK: CRUD + RPC" --> DB
-    UI -- "SDK: upload/serve" --> Storage
-    UI -- "SDK: invoke" --> Functions
+    UI -- "auth" --> Auth
+    UI -- "CRUD + RPC" --> DB
+    UI -- "upload/serve" --> Storage
+    UI -- "invoke" --> Functions
     Functions -- "initiate payment" --> Gateway
-    Gateway -- "callback (validated\nserver-to-server)" --> Functions
-    Functions -- "fulfill order\n(service-role RPC)" --> DB
-    Sites -. serves .-> Browser
+    Gateway -- "callback (validated
+server-to-server)" --> Functions
+    Functions -- "fulfill order
+(service-role RPC)" --> DB
+    Functions -- "send" --> Resend
+    Auth -- "SMTP" --> Resend
+    Vercel -. serves .-> Browser
 ```
 
 **Why it's shaped this way:**
-- **No app server to run or patch.** The SPA is static; InsForge is the entire backend.
-- **Row Level Security everywhere.** Every table enforces who can read/write which rows at the database layer, not in application code — see [`migrations/`](migrations/).
-- **Money never trusts the client.** Cart prices, promo discounts, shipping, and inventory are recomputed inside Postgres RPCs (`place_order`, `create_pending_gateway_order`, `fulfill_gateway_order`, `cancel_own_order`) — the browser only ever sends product IDs and quantities.
-- **Payment secrets never reach the browser.** The SSLCommerz store password lives only in InsForge's encrypted secrets store, read by the two edge functions in [`functions/`](functions/).
+- **No app server to run or patch.** The SPA is static; Supabase is the entire backend.
+- **Row Level Security everywhere.** Every table enforces who can read/write which rows at the database layer, not in application code — see [`supabase/migrations/`](supabase/migrations/).
+- **Money never trusts the client.** Cart prices, promo discounts, shipping, and inventory are recomputed inside Postgres RPCs (`place_order`, `create_pending_gateway_order`, `fulfill_gateway_order`, `cancel_own_order`) — the browser only ever sends product IDs and quantities. Internal RPCs like `fulfill_gateway_order` can only be called with the service-role key, from the edge functions.
+- **Secrets never reach the browser.** The SSLCommerz store password and the Resend API key live only in Supabase's edge function secrets, read by the functions in [`supabase/functions/`](supabase/functions/).
 
 ## Tech Stack
 
@@ -76,20 +91,26 @@ flowchart LR
 |-------|-----------|
 | **Frontend** | React 19, TypeScript 5.8, Vite 6 |
 | **Styling** | Tailwind CSS v4, Lucide React icons, Motion (Framer Motion v12) |
-| **Backend** | [InsForge](https://insforge.dev) — Postgres, auth, storage, edge functions |
-| **Database** | Postgres (InsForge-managed), Row Level Security on every table |
-| **Payment Gateway** | SSLCommerz (Bangladesh), via an InsForge edge function |
-| **Authentication** | InsForge Auth — email/password (with verification) + Google OAuth |
-| **Hosting** | InsForge Sites |
+| **Backend** | [Supabase](https://supabase.com) — Postgres, auth, storage, edge functions |
+| **Database** | Postgres 17 (Supabase-managed), Row Level Security on every table |
+| **Payment Gateway** | SSLCommerz (Bangladesh), via a Supabase edge function |
+| **Authentication** | Supabase Auth — email/password (with 6-digit email code) + Google OAuth |
+| **Email** | [Resend](https://resend.com) — order emails via an edge function, sign-up codes via SMTP |
+| **Hosting** | Vercel |
 
 ## Project Structure
 
 ```
 Lagle-Janaben/
-├── functions/                    # InsForge edge functions (Deno)
-│   ├── sslcommerz-initiate.ts    # Starts a payment session for a pending order
-│   └── sslcommerz-callback.ts    # Validates & fulfills success/fail/cancel/IPN
-├── migrations/                   # Versioned SQL — schema, RLS policies, RPCs
+├── supabase/
+│   ├── config.toml               # Supabase CLI config (auth, edge function JWT settings)
+│   ├── migrations/               # Versioned SQL — schema, RLS policies, RPCs, grants
+│   ├── templates/                # Auth email templates (sign-up verification code)
+│   └── functions/                # Edge functions (Deno)
+│       ├── _shared/              # CORS/service-role client + order email templates & Resend sender
+│       ├── sslcommerz-initiate/  # Starts a payment session for a pending order
+│       ├── sslcommerz-callback/  # Validates & fulfills success/fail/cancel/IPN
+│       └── send-order-email/     # Order confirmation / cancellation emails
 ├── assets/.aistudio/             # AI Studio managed assets
 ├── docs/screenshots/             # README preview images
 ├── src/                          # React + TypeScript frontend
@@ -99,12 +120,12 @@ Lagle-Janaben/
 │   ├── data.ts                   # Static catalog category list
 │   ├── index.css                 # Tailwind v4 + fonts
 │   ├── lib/
-│   │   ├── insforge.ts           # InsForge SDK client
+│   │   ├── supabase.ts           # Supabase client
 │   │   ├── pricing.ts            # Shared cart total computation (display only)
 │   │   ├── validation.ts         # Shared email/BD-phone validation
-│   │   └── api/                  # Typed wrappers around the InsForge SDK
+│   │   └── api/                  # Typed wrappers around supabase-js
 │   │       ├── auth.ts, products.ts, orders.ts, customers.ts, accounts.ts
-│   │       ├── promoCodes.ts, shippingSettings.ts, heroSlides.ts
+│   │       ├── promoCodes.ts, shippingSettings.ts, heroSlides.ts, notifications.ts
 │   └── components/
 │       ├── AdminDashboard.tsx    # Admin panel (8 tabs: overview, products, orders, customers, accounts, promos, shipping, hero)
 │       ├── CartDrawer.tsx        # Slide-over cart with promo code support
@@ -117,11 +138,11 @@ Lagle-Janaben/
 │       ├── Navbar.tsx            # Sticky header, admin-gated nav, cart badge, user menu
 │       ├── ProductDetailView.tsx # Product detail with gallery, add-to-cart
 │       └── Register.tsx          # Registration with BD phone, password, email-code verification
-├── .env.example                  # VITE_INSFORGE_URL / VITE_INSFORGE_ANON_KEY template
+├── .env.example                  # VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY template
 ├── index.html                    # SPA entry point
 ├── package.json                  # npm dependencies & scripts
 ├── tsconfig.json                 # TypeScript config
-├── vercel.json                   # SPA rewrite rule for InsForge Sites hosting
+├── vercel.json                   # SPA rewrite rule for Vercel
 └── vite.config.ts                # Vite build config (React + Tailwind)
 ```
 
@@ -132,7 +153,7 @@ Lagle-Janaben/
 - **Shopping Cart** — Slide-over drawer, quantity controls, promo codes, real-time totals
 - **Checkout** — Cash on Delivery today; SSLCommerz (cards, bKash, Nagad, Rocket) wired up and ready, shown as "Coming Soon" until live merchant credentials are configured
 - **My Orders** — Signed-in customers see their own order history and can self-cancel a Pending/Processing order within 2 hours, with a live countdown
-- **Authentication** — Email/password (with email verification) & Google OAuth, via InsForge Auth
+- **Authentication** — Email/password (with email verification) & Google OAuth, via Supabase Auth
 - **Admin Dashboard** — 8-tab panel: Overview, Products, Orders, Customers, Accounts, Promo Codes, Shipping, Hero Slider (role-gated)
 - **Accounts directory** — Admins can see every registered account, not just people who've ordered
 - **CRM** — Server-maintained customer profiles (order count & total spent), never client-written
@@ -143,31 +164,37 @@ Lagle-Janaben/
 
 `products` | `orders` | `order_items` | `customers` | `profiles` | `promo_codes` | `shipping_settings` | `hero_slides`
 
-Plus InsForge's built-in `auth.users`. See [`migrations/`](migrations/) for the full schema, RLS policies, and order-fulfillment RPCs (`place_order`, `create_pending_gateway_order`, `fulfill_gateway_order`, `cancel_own_order`, `get_order_by_id`, `validate_promo`, `sync_my_profile`).
+Plus Supabase's built-in `auth.users`. See [`supabase/migrations/`](supabase/migrations/) for the full schema, RLS policies, and order-fulfillment RPCs (`place_order`, `create_pending_gateway_order`, `fulfill_gateway_order`, `cancel_own_order`, `get_order_by_id`, `validate_promo`, `sync_my_profile`).
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 22+
-- An [InsForge](https://insforge.dev) project (`npx @insforge/cli login` then `npx @insforge/cli link`)
+- A [Supabase](https://supabase.com) project and the CLI (`npx supabase login`, then `npx supabase link --project-ref <ref>`)
+- A [Resend](https://resend.com) API key and verified sending domain (order emails and sign-up codes)
+- A Google OAuth client ID/secret, if you want Google sign-in
 - SSLCommerz sandbox or live store credentials (optional — Cash on Delivery works without them)
 
 ### Setup
 
 1. Clone the repo and install dependencies: `npm install`
-2. Copy `.env.example` to `.env` and fill in `VITE_INSFORGE_URL` / `VITE_INSFORGE_ANON_KEY` (from `npx @insforge/cli current` and `npx @insforge/cli secrets get ANON_KEY`)
-3. Apply the database schema: `npx @insforge/cli db migrations up --all`
-4. Deploy the edge functions: `npx @insforge/cli functions deploy sslcommerz-initiate --file functions/sslcommerz-initiate.ts` and the same for `sslcommerz-callback`
-5. Set SSLCommerz secrets: `npx @insforge/cli secrets add SSLCOMMERZ_STORE_ID ...` / `SSLCOMMERZ_STORE_PASSWORD ...` / `SSLCOMMERZ_IS_SANDBOX true`
-6. Promote your admin account: after signing up once in the app, run a migration or `db query` to insert `{ id: <your auth user id>, role: 'admin' }` into `profiles`
-7. Run `npm run dev` for development
+2. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (Supabase dashboard → Project Settings → API)
+3. Apply the database schema: `npx supabase db push`
+4. Deploy the edge functions: `npx supabase functions deploy` (JWT verification is off per `supabase/config.toml`; each function does its own checks)
+5. Set edge function secrets:
+   ```bash
+   npx supabase secrets set SITE_URL=https://your-site.vercel.app      RESEND_API_KEY=re_... EMAIL_FROM="Lagle Janaben <orders@your-domain.com>"      SSLCOMMERZ_STORE_ID=... SSLCOMMERZ_STORE_PASSWORD=... SSLCOMMERZ_IS_SANDBOX=true
+   ```
+6. In the Supabase dashboard → Authentication: set the Site URL and redirect URLs to your site, add Resend as custom SMTP, paste [`supabase/templates/confirmation.html`](supabase/templates/confirmation.html) as the "Confirm signup" template (it sends a 6-digit code), and enable the Google provider
+7. Promote your admin account: after signing up once in the app, set `role = 'admin'` on your row in `profiles` (SQL editor)
+8. Run `npm run dev` for development
 
 ### Deployment
 
 ```bash
-npm run build
-npx @insforge/cli deployments env set VITE_INSFORGE_URL <url>
-npx @insforge/cli deployments env set VITE_INSFORGE_ANON_KEY <key>
-npx @insforge/cli deployments deploy .
+npx vercel link
+npx vercel env add VITE_SUPABASE_URL production
+npx vercel env add VITE_SUPABASE_ANON_KEY production
+npx vercel deploy --prod
 ```

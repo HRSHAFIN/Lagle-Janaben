@@ -1,4 +1,4 @@
-import { insforge } from '../insforge';
+import { supabase } from '../supabase';
 import { Product, ProductOption } from '../../types';
 
 interface ProductRow {
@@ -42,7 +42,7 @@ function mapProduct(row: ProductRow): Product {
 }
 
 export async function fetchProducts(): Promise<Product[]> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('products')
     .select()
     .order('created_at', { ascending: false })
@@ -52,7 +52,7 @@ export async function fetchProducts(): Promise<Product[]> {
 }
 
 export async function createProduct(product: Omit<Product, 'id'>): Promise<Product> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('products')
     .insert([
       {
@@ -79,7 +79,7 @@ export async function createProduct(product: Omit<Product, 'id'>): Promise<Produ
 }
 
 export async function updateProduct(product: Product): Promise<Product> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('products')
     .update({
       name: product.name,
@@ -105,6 +105,6 @@ export async function updateProduct(product: Product): Promise<Product> {
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  const { error } = await insforge.database.from('products').delete().eq('id', id);
+  const { error } = await supabase.from('products').delete().eq('id', id);
   if (error) throw new Error(error.message);
 }

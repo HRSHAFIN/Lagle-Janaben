@@ -39,7 +39,7 @@ interface AppliedPromo {
 
 export default function App() {
   // --------------------------------------------------------
-  // STOREFRONT DATA (InsForge-backed)
+  // STOREFRONT DATA (Supabase-backed)
   // --------------------------------------------------------
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);

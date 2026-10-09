@@ -1,22 +1,17 @@
 # AGENTS.md
 
-<!-- INSFORGE:START -->
-## InsForge backend
+## Supabase backend
 
-This project uses [InsForge](https://insforge.dev): an all-in-one, open-source Postgres-based backend (BaaS) that gives this app a database, authentication, file storage, edge functions, realtime, an AI model gateway, and payments through one platform.
+This project uses [Supabase](https://supabase.com) for its database (Postgres), authentication, file storage and edge functions. The site is hosted on Vercel; order and sign-up emails go through Resend.
 
-- **Project:** **Lagle Janaben** (API base `https://tup5n9bf.ap-southeast.insforge.app`)
-- **Skills:** these InsForge skills are installed for supported coding agents. Reach for them before implementing any InsForge feature instead of guessing the API:
-  - `insforge`: app code with the `@insforge/sdk` client (database CRUD, auth, storage, edge functions, realtime, AI, email, and Stripe payments).
-  - `insforge-cli`: backend and infrastructure via the `insforge` CLI (projects, SQL, migrations, RLS policies, storage buckets, functions, secrets, payment setup, schedules, deploys).
-  - `insforge-debug`: diagnosing failures (SDK/HTTP errors, RLS denials, auth and OAuth issues) and running security or performance audits.
-  - `insforge-integrations`: wiring external auth providers (Clerk, Auth0, WorkOS, Better Auth, etc.) for JWT-based RLS, or the OKX x402 payment facilitator.
-  - `find-skills`: discovering additional skills on demand.
-- **Credentials:** app code reads keys from `.env.local`; the CLI reads `.insforge/project.json`. Never hardcode or commit keys.
+- **Project:** **Lagle Janaben** (ref `cjbbbssijasbujsbsast`, API base `https://cjbbbssijasbujsbsast.supabase.co`)
+- **Schema:** versioned SQL in `supabase/migrations/`. Apply with `npx supabase db push`; never edit an applied migration, add a new one.
+- **Edge functions:** `supabase/functions/<name>/index.ts`, deployed with `npx supabase functions deploy`. JWT verification is off for all of them (`supabase/config.toml`), so each function validates its own input.
+- **Credentials:** app code reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from `.env.local`. Server secrets (`RESEND_API_KEY`, `EMAIL_FROM`, `SITE_URL`, `SSLCOMMERZ_*`) are edge function secrets (`npx supabase secrets set`). Never hardcode or commit keys.
 
 Key patterns:
 
-- Database inserts take an array: `insert([{ ... }])`.
 - Reference users with `auth.users(id)`; use `auth.uid()` in RLS policies.
-- For storage uploads, persist both the returned `url` and `key`.
-<!-- INSFORGE:END -->
+- Supabase grants `EXECUTE` on new public functions to `anon` and `authenticated` directly, so `REVOKE ... FROM PUBLIC` is not enough. Default privileges are already revoked (see `20261009090000_supabase-function-grants.sql`); every function the app calls needs an explicit `GRANT EXECUTE`.
+- Money-related writes (pricing, inventory, promo redemption, payment fulfillment) happen only inside Postgres RPCs, never from the browser.
+- For storage uploads, persist both the public URL and the object path (`image_url` + `image_key`).

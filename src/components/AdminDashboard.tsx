@@ -578,7 +578,7 @@ export default function AdminDashboard({
 
         <div className="flex items-center space-x-1.5 self-start rounded-full bg-emerald-50 px-3 py-1 font-mono text-xs font-semibold text-emerald-700 ring-1 ring-emerald-600/10">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span>INSFORGE CONNECTED</span>
+          <span>SUPABASE CONNECTED</span>
         </div>
       </div>
 

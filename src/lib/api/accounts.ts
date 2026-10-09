@@ -1,4 +1,4 @@
-import { insforge } from '../insforge';
+import { supabase } from '../supabase';
 import { Account } from '../../types';
 
 interface ProfileRow {
@@ -12,7 +12,7 @@ interface ProfileRow {
 
 /** Admin-only: every registered account that has synced a profile row. */
 export async function fetchAccounts(): Promise<Account[]> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('profiles')
     .select()
     .order('created_at', { ascending: false })

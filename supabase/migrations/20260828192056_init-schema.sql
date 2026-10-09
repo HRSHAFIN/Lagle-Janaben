@@ -120,17 +120,28 @@ CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
 -- updated_at triggers
 -- ---------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION public.update_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER products_updated_at BEFORE UPDATE ON public.products
-  FOR EACH ROW EXECUTE FUNCTION system.update_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 CREATE TRIGGER shipping_settings_updated_at BEFORE UPDATE ON public.shipping_settings
-  FOR EACH ROW EXECUTE FUNCTION system.update_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 CREATE TRIGGER hero_slides_updated_at BEFORE UPDATE ON public.hero_slides
-  FOR EACH ROW EXECUTE FUNCTION system.update_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 CREATE TRIGGER customers_updated_at BEFORE UPDATE ON public.customers
-  FOR EACH ROW EXECUTE FUNCTION system.update_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 -- ---------------------------------------------------------------------
 -- Helper: is_admin()

@@ -1,4 +1,4 @@
-import { insforge } from '../insforge';
+import { supabase } from '../supabase';
 import { Customer } from '../../types';
 
 interface CustomerRow {
@@ -12,7 +12,7 @@ interface CustomerRow {
 }
 
 export async function fetchCustomers(): Promise<Customer[]> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('customers')
     .select()
     .order('created_at', { ascending: false })
@@ -30,6 +30,6 @@ export async function fetchCustomers(): Promise<Customer[]> {
 }
 
 export async function updateCustomerStatus(id: string, status: Customer['status']): Promise<void> {
-  const { error } = await insforge.database.from('customers').update({ status }).eq('id', id);
+  const { error } = await supabase.from('customers').update({ status }).eq('id', id);
   if (error) throw new Error(error.message);
 }

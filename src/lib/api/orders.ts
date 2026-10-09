@@ -1,4 +1,4 @@
-import { insforge } from '../insforge';
+import { supabase } from '../supabase';
 import { CartItem, Order, OrderItem } from '../../types';
 
 interface OrderJsonItem {
@@ -73,7 +73,7 @@ export async function placeCodOrder(
   shippingAddress: string,
   promoCode: string | null
 ): Promise<Order> {
-  const { data, error } = await insforge.database.rpc('place_order', {
+  const { data, error } = await supabase.rpc('place_order', {
     p_items: cartToItems(cart),
     p_customer_name: customerName,
     p_customer_email: customerEmail,
@@ -92,7 +92,7 @@ export async function createGatewayOrder(
   shippingAddress: string,
   promoCode: string | null
 ): Promise<Order> {
-  const { data, error } = await insforge.database.rpc('create_pending_gateway_order', {
+  const { data, error } = await supabase.rpc('create_pending_gateway_order', {
     p_items: cartToItems(cart),
     p_customer_name: customerName,
     p_customer_email: customerEmail,
@@ -115,7 +115,7 @@ export async function initiateSslcommerzPayment(
   orderId: string,
   details: SslcommerzDeliveryDetails
 ): Promise<string> {
-  const { data, error } = await insforge.functions.invoke('sslcommerz-initiate', {
+  const { data, error } = await supabase.functions.invoke('sslcommerz-initiate', {
     body: { orderId, ...details },
   });
   if (error) throw new Error(error.message);
@@ -126,7 +126,7 @@ export async function initiateSslcommerzPayment(
 
 /** Guest-safe lookup — the order id itself is the unguessable receipt token. */
 export async function getOrderById(orderId: string): Promise<Order | null> {
-  const { data, error } = await insforge.database.rpc('get_order_by_id', { p_order_id: orderId });
+  const { data, error } = await supabase.rpc('get_order_by_id', { p_order_id: orderId });
   if (error) throw new Error(error.message);
   if (!data) return null;
   return mapOrderJson(data as OrderJson);
@@ -182,7 +182,7 @@ function mapOrderRow(row: OrderRow): Order {
 
 /** Admin-only order log. RLS scopes this automatically: admins see every order, everyone else sees only their own. */
 export async function fetchOrders(): Promise<Order[]> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('orders')
     .select('*, order_items(product_id, name, price, quantity, image, selected_options)')
     .order('created_at', { ascending: false })
@@ -197,7 +197,7 @@ export async function fetchOrders(): Promise<Order[]> {
  * admin's "My Orders" page shows only orders *they* placed, not everyone's.
  */
 export async function fetchMyOrders(userId: string): Promise<Order[]> {
-  const { data, error } = await insforge.database
+  const { data, error } = await supabase
     .from('orders')
     .select('*, order_items(product_id, name, price, quantity, image, selected_options)')
     .eq('user_id', userId)
@@ -208,19 +208,19 @@ export async function fetchMyOrders(userId: string): Promise<Order[]> {
 }
 
 export async function updateOrderStatus(orderId: string, status: Order['status']): Promise<void> {
-  const { error } = await insforge.database.from('orders').update({ status }).eq('id', orderId);
+  const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
   if (error) throw new Error(error.message);
 }
 
 /** Self-service cancellation — server enforces ownership and the 2-hour window. */
 export async function cancelOwnOrder(orderId: string): Promise<Order> {
-  const { data, error } = await insforge.database.rpc('cancel_own_order', { p_order_id: orderId });
+  const { data, error } = await supabase.rpc('cancel_own_order', { p_order_id: orderId });
   if (error) throw new Error(error.message);
   return mapOrderJson(data as OrderJson);
 }
 
 /** Admin-only — RLS also enforces that only an already-Cancelled order can be deleted. */
 export async function deleteOrder(orderId: string): Promise<void> {
-  const { error } = await insforge.database.from('orders').delete().eq('id', orderId);
+  const { error } = await supabase.from('orders').delete().eq('id', orderId);
   if (error) throw new Error(error.message);
 }

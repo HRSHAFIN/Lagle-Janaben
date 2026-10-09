@@ -1,19 +1,6 @@
-import { createClient } from 'npm:@insforge/sdk';
+import { adminClient, corsHeaders, json } from '../_shared/http.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
-export default async function (req: Request): Promise<Response> {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -39,17 +26,9 @@ export default async function (req: Request): Promise<Response> {
     return json({ error: 'orderId is required' }, 400);
   }
 
-  const baseUrl = Deno.env.get('INSFORGE_BASE_URL');
-  const anonKey = Deno.env.get('ANON_KEY');
-  if (!baseUrl || !anonKey) {
-    return json({ error: 'Server misconfiguration' }, 500);
-  }
-
-  const client = createClient({ baseUrl, anonKey });
-
   // Authoritative order + amount, fetched server-side — never trust a
   // client-sent amount for the gateway call.
-  const { data: order, error: orderError } = await client.database.rpc('get_order_by_id', {
+  const { data: order, error: orderError } = await adminClient().rpc('get_order_by_id', {
     p_order_id: orderId,
   });
 
@@ -68,7 +47,7 @@ export default async function (req: Request): Promise<Response> {
     ? 'https://sandbox.sslcommerz.com/gwprocess/v4/api.php'
     : 'https://securepay.sslcommerz.com/gwprocess/v4/api.php';
 
-  const callbackBase = `${baseUrl}/functions/sslcommerz-callback`;
+  const callbackBase = `${Deno.env.get('SUPABASE_URL')}/functions/v1/sslcommerz-callback`;
 
   const postData: Record<string, string> = {
     store_id: storeId,
@@ -122,4 +101,4 @@ export default async function (req: Request): Promise<Response> {
     },
     500
   );
-}
+});
