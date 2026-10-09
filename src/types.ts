@@ -49,6 +49,8 @@ export interface Order {
   id: string;
   customerName: string;
   customerEmail: string;
+  /** Saved since Oct 2026; older guest orders may not have one. */
+  customerPhone: string | null;
   shippingAddress: string;
   items: OrderItem[];
   subtotal: number;

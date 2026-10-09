@@ -14,6 +14,7 @@ interface OrderJson {
   id: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string | null;
   shippingAddress: string;
   subtotal: number;
   discount: number;
@@ -43,6 +44,7 @@ function mapOrderJson(json: OrderJson): Order {
     id: json.id,
     customerName: json.customerName,
     customerEmail: json.customerEmail,
+    customerPhone: json.customerPhone ?? null,
     shippingAddress: json.shippingAddress,
     items: (json.items ?? []).map(mapOrderItemJson),
     subtotal: Number(json.subtotal),
@@ -70,6 +72,7 @@ export async function placeCodOrder(
   cart: CartItem[],
   customerName: string,
   customerEmail: string,
+  customerPhone: string,
   shippingAddress: string,
   promoCode: string | null
 ): Promise<Order> {
@@ -77,6 +80,7 @@ export async function placeCodOrder(
     p_items: cartToItems(cart),
     p_customer_name: customerName,
     p_customer_email: customerEmail,
+    p_customer_phone: customerPhone,
     p_shipping_address: shippingAddress,
     p_promo_code: promoCode,
   });
@@ -89,6 +93,7 @@ export async function createGatewayOrder(
   cart: CartItem[],
   customerName: string,
   customerEmail: string,
+  customerPhone: string,
   shippingAddress: string,
   promoCode: string | null
 ): Promise<Order> {
@@ -96,6 +101,7 @@ export async function createGatewayOrder(
     p_items: cartToItems(cart),
     p_customer_name: customerName,
     p_customer_email: customerEmail,
+    p_customer_phone: customerPhone,
     p_shipping_address: shippingAddress,
     p_promo_code: promoCode,
   });
@@ -136,6 +142,7 @@ interface OrderRow {
   id: string;
   customer_name: string;
   customer_email: string;
+  customer_phone: string | null;
   shipping_address: string;
   subtotal: number | string;
   discount: number | string;
@@ -159,6 +166,7 @@ function mapOrderRow(row: OrderRow): Order {
     id: row.id,
     customerName: row.customer_name,
     customerEmail: row.customer_email,
+    customerPhone: row.customer_phone ?? null,
     shippingAddress: row.shipping_address,
     items: (row.order_items ?? []).map((it) => ({
       productId: it.product_id,

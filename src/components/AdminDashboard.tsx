@@ -2,17 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, ShoppingCart, Users, Package, Search, Plus,
   Edit2, Trash2, X, Check, Eye, ChevronRight, CheckCircle2,
-  AlertTriangle, Percent, Truck, Image, GripVertical, UserCog, ShieldCheck, Star
+  AlertTriangle, Percent, Truck, Image, GripVertical, UserCog, ShieldCheck, Star, FileText, Phone
 } from 'lucide-react';
 import { Product, Order, Customer, Account, AdminTabType, PromoCode, ShippingSettings, HeroSlide, ProductOption } from '../types';
 import { CATEGORIES } from '../data';
 import { fetchHeroSlides, uploadHeroImage, createHeroSlide, updateHeroSlide, deleteHeroSlide } from '../lib/api/heroSlides';
 import ProductOptionsEditor from './ProductOptionsEditor';
 import { formatSelectedOptions } from '../lib/cart';
-
-function shortId(id: string): string {
-  return `#${id.slice(0, 8).toUpperCase()}`;
-}
+import { orderShippingFee, shortId } from '../lib/format';
+import OrderInvoice from './OrderInvoice';
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -344,6 +342,7 @@ export default function AdminDashboard({
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order | null>(null);
+  const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
 
   // Customers tab states
   const [customerSearch, setCustomerSearch] = useState('');
@@ -921,7 +920,7 @@ export default function AdminDashboard({
                 <div className="relative flex-1 max-w-sm">
                   <input
                     type="text"
-                    placeholder="Search orders by customer..."
+                    placeholder="Search by name, email or phone..."
                     value={orderSearch}
                     onChange={(e) => setOrderSearch(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 py-2 pl-3 pr-10 text-sm focus:border-gray-900 focus:outline-none"
@@ -965,9 +964,11 @@ export default function AdminDashboard({
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {orders
                       .filter((o) => {
+                        const query = orderSearch.toLowerCase();
                         const matchesSearch =
-                          o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
-                          o.customerEmail.toLowerCase().includes(orderSearch.toLowerCase());
+                          o.customerName.toLowerCase().includes(query) ||
+                          o.customerEmail.toLowerCase().includes(query) ||
+                          (o.customerPhone ?? '').includes(orderSearch.trim());
                         const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
                         return matchesSearch && matchesStatus;
                       })
@@ -980,6 +981,10 @@ export default function AdminDashboard({
                             <div>
                               <p className="font-sans font-semibold text-gray-900">{order.customerName}</p>
                               <p className="font-sans text-xs text-gray-400">{order.customerEmail}</p>
+                              <p className="flex items-center gap-1 font-mono text-xs text-gray-500">
+                                <Phone className="h-3 w-3" />
+                                {order.customerPhone || '—'}
+                              </p>
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 font-sans text-gray-600">
@@ -1022,6 +1027,14 @@ export default function AdminDashboard({
                               >
                                 <Eye className="h-3.5 w-3.5" />
                                 <span>View Details</span>
+                              </button>
+                              <button
+                                onClick={() => setInvoiceOrder(order)}
+                                className="flex items-center space-x-1 font-sans text-xs font-semibold text-[#1E2D44] hover:text-[#16233a] bg-[#B88E4C]/10 hover:bg-[#B88E4C]/20 px-2.5 py-1.5 rounded-lg transition-colors"
+                                id={`invoice-order-${order.id}`}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                <span>Invoice</span>
                               </button>
                               {order.status === 'Cancelled' && (
                                 <button
@@ -1815,6 +1828,7 @@ export default function AdminDashboard({
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Customer Shipping</h3>
                   <div className="rounded-xl border border-gray-100 p-4 bg-gray-50/50 space-y-2 text-sm text-gray-800">
                     <p><span className="font-semibold text-gray-900">Name:</span> {selectedOrderDetail.customerName}</p>
+                    <p><span className="font-semibold text-gray-900">Phone:</span> {selectedOrderDetail.customerPhone || 'Not provided'}</p>
                     <p><span className="font-semibold text-gray-900">Email:</span> {selectedOrderDetail.customerEmail}</p>
                     <p><span className="font-semibold text-gray-900">Address:</span> {selectedOrderDetail.shippingAddress}</p>
                   </div>
@@ -1874,7 +1888,7 @@ export default function AdminDashboard({
                   <div className="flex justify-between text-gray-500">
                     <span>Shipping fee</span>
                     <span className="font-mono">
-                      {selectedOrderDetail.subtotal >= shippingSettings.free_shipping_threshold ? 'Free' : `৳${shippingSettings.shipping_fee.toFixed(2)}`}
+                      {orderShippingFee(selectedOrderDetail) === 0 ? 'Free' : `৳${orderShippingFee(selectedOrderDetail).toFixed(2)}`}
                     </span>
                   </div>
                   <div className="border-t border-gray-200 my-2" />
@@ -1889,11 +1903,22 @@ export default function AdminDashboard({
                   <span className="font-semibold text-gray-700">{selectedOrderDetail.paymentMethod}</span>
                   <CheckCircle2 className={`h-3.5 w-3.5 ${selectedOrderDetail.paymentStatus === 'paid' ? 'text-emerald-500' : 'text-gray-300'}`} />
                 </div>
+
+                <button
+                  onClick={() => setInvoiceOrder(selectedOrderDetail)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E2D44] py-3 text-sm font-semibold text-white shadow hover:bg-[#16233a]"
+                  id="order-detail-invoice-btn"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>View Invoice</span>
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {invoiceOrder && <OrderInvoice order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />}
     </div>
   );
 }

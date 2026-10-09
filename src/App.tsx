@@ -329,8 +329,8 @@ export default function App() {
   // --------------------------------------------------------
   // CHECKOUT — server-side, atomic, price-authoritative
   // --------------------------------------------------------
-  const handlePlaceCodOrder = async (data: { customerName: string; customerEmail: string; shippingAddress: string }): Promise<Order> => {
-    const order = await placeCodOrder(cart, data.customerName, data.customerEmail, data.shippingAddress, appliedPromo?.code ?? null);
+  const handlePlaceCodOrder = async (data: { customerName: string; customerEmail: string; customerPhone: string; shippingAddress: string }): Promise<Order> => {
+    const order = await placeCodOrder(cart, data.customerName, data.customerEmail, data.customerPhone, data.shippingAddress, appliedPromo?.code ?? null);
     applyLocalFulfillment(order);
     sendInvoiceEmail(order).catch((err) => console.warn('Could not send invoice email:', err));
     return order;
@@ -339,10 +339,11 @@ export default function App() {
   const handleInitiateGatewayOrder = async (data: {
     customerName: string;
     customerEmail: string;
+    customerPhone: string;
     shippingAddress: string;
     delivery: SslcommerzDeliveryDetails;
   }): Promise<{ order: Order; redirectUrl: string }> => {
-    const order = await createGatewayOrder(cart, data.customerName, data.customerEmail, data.shippingAddress, appliedPromo?.code ?? null);
+    const order = await createGatewayOrder(cart, data.customerName, data.customerEmail, data.customerPhone, data.shippingAddress, appliedPromo?.code ?? null);
     const redirectUrl = await initiateSslcommerzPayment(order.id, data.delivery);
     return { order, redirectUrl };
   };

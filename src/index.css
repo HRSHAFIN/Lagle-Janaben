@@ -6,3 +6,13 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+
+/* Invoice printing: OrderInvoice renders outside #root, so hide the app and print only the invoice. */
+@media print {
+  body:has(#order-invoice-overlay) > #root {
+    display: none !important;
+  }
+  @page {
+    margin: 14mm;
+  }
+}

@@ -16,10 +16,11 @@ interface CheckoutViewProps {
   appliedPromo: AppliedPromo | null;
   shippingSettings: ShippingSettings;
   isAdmin: boolean;
-  onPlaceCodOrder: (data: { customerName: string; customerEmail: string; shippingAddress: string }) => Promise<Order>;
+  onPlaceCodOrder: (data: { customerName: string; customerEmail: string; customerPhone: string; shippingAddress: string }) => Promise<Order>;
   onInitiateGatewayOrder: (data: {
     customerName: string;
     customerEmail: string;
+    customerPhone: string;
     shippingAddress: string;
     delivery: SslcommerzDeliveryDetails;
   }) => Promise<{ order: Order; redirectUrl: string }>;
@@ -166,6 +167,7 @@ export default function CheckoutView({
         const { order, redirectUrl } = await onInitiateGatewayOrder({
           customerName: formData.name,
           customerEmail: formData.email,
+          customerPhone: formData.phone.trim(),
           shippingAddress: fullShippingAddress,
           delivery: {
             cusPhone: formData.phone,
@@ -195,6 +197,7 @@ export default function CheckoutView({
       const order = await onPlaceCodOrder({
         customerName: formData.name,
         customerEmail: formData.email,
+        customerPhone: formData.phone.trim(),
         shippingAddress: fullShippingAddress,
       });
       setCreatedOrder(order);
