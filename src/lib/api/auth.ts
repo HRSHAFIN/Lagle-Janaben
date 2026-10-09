@@ -47,8 +47,9 @@ export interface SignUpResult {
   requiresVerification: boolean;
 }
 
-export async function signUp(name: string, email: string, password: string): Promise<SignUpResult> {
-  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+export async function signUp(name: string, email: string, phone: string, password: string): Promise<SignUpResult> {
+  // phone is stored on the auth user at sign-up; a DB trigger rejects sign-ups without a valid one.
+  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, phone } } });
   if (error) {
     return { user: null, error: error.message || 'Could not create your account. Please try again.', requiresVerification: false };
   }
@@ -77,7 +78,11 @@ export async function resendSignUpCode(email: string): Promise<void> {
 /** Keeps the public.profiles directory row in sync so admins can see registered accounts. */
 export async function syncMyProfile(name: string, email: string, phone?: string | null): Promise<void> {
   try {
-    await supabase.rpc('sync_my_profile', { p_name: name, p_email: email, p_phone: phone ?? null });
+    // Fall back to the phone saved at sign-up, so it reaches the directory even if
+    // the code was entered in another tab or the user just signs in later.
+    const { data } = await supabase.auth.getSession();
+    const signupPhone = (data.session?.user.user_metadata?.phone as string | undefined) ?? null;
+    await supabase.rpc('sync_my_profile', { p_name: name, p_email: email, p_phone: phone || signupPhone });
   } catch {
     // Best-effort — a failed directory sync shouldn't block sign-in/sign-up.
   }

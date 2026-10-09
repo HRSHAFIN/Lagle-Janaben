@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Check, Eye, EyeOff, Gift, Lock, Mail, Phone, ShieldCheck, User as UserIcon } from 'lucide-react';
 import Logo from './Logo';
-import GoogleAuthButton from './GoogleAuthButton';
 import { isValidBdPhone, isValidEmail } from '../lib/validation';
 
 interface RegisterProps {
@@ -11,7 +10,6 @@ interface RegisterProps {
   }>;
   onVerifyCode: (email: string, otp: string, phone: string) => Promise<string | null>;
   onResendCode: (email: string) => Promise<void>;
-  onGoogleLogin: () => void;
   onNavigateLogin: () => void;
   onBackToCatalog: () => void;
 }
@@ -25,7 +23,7 @@ function getPasswordChecks(password: string) {
   };
 }
 
-export default function Register({ onRegister, onVerifyCode, onResendCode, onGoogleLogin, onNavigateLogin, onBackToCatalog }: RegisterProps) {
+export default function Register({ onRegister, onVerifyCode, onResendCode, onNavigateLogin, onBackToCatalog }: RegisterProps) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -390,14 +388,6 @@ export default function Register({ onRegister, onVerifyCode, onResendCode, onGoo
               {isSubmitting ? 'Creating account…' : 'Create Account'}
             </button>
           </form>
-
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-100" />
-            <span className="font-sans text-xs font-medium text-gray-400">or continue with</span>
-            <div className="h-px flex-1 bg-gray-100" />
-          </div>
-
-          <GoogleAuthButton label="Sign up with Google" onClick={onGoogleLogin} />
           </>
           )}
         </div>

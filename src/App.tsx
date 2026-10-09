@@ -26,7 +26,6 @@ import {
   verifySignUpCode,
   resendSignUpCode,
   syncMyProfile,
-  signInWithGoogle,
   signOut,
 } from './lib/api/auth';
 import { sendInvoiceEmail, sendCancellationEmail } from './lib/api/notifications';
@@ -90,7 +89,7 @@ export default function App() {
     getCurrentUser()
       .then((user) => {
         setCurrentUser(user);
-        // Covers Google OAuth returns and any session where the directory
+        // Covers any session where the directory
         // row hasn't been synced yet — cheap upsert, safe to run every load.
         if (user) syncMyProfile(user.name, user.email).catch(() => {});
       })
@@ -128,7 +127,7 @@ export default function App() {
   };
 
   const handleRegister = async (data: { name: string; email: string; phone: string; password: string }) => {
-    const result = await signUp(data.name, data.email, data.password);
+    const result = await signUp(data.name, data.email, data.phone, data.password);
     if (result.error) return { error: result.error, requiresVerification: false };
     if (result.requiresVerification) return { error: null, requiresVerification: true };
     if (result.user) {
@@ -152,12 +151,6 @@ export default function App() {
 
   const handleResendCode = async (email: string) => {
     await resendSignUpCode(email);
-  };
-
-  const handleGoogleLogin = () => {
-    signInWithGoogle(window.location.origin + window.location.pathname).catch((err) => {
-      console.error('Google sign-in failed:', err);
-    });
   };
 
   const handleLogout = async () => {
@@ -513,7 +506,6 @@ export default function App() {
         {currentView === 'login' && !authLoading && (
           <Login
             onLogin={handleLogin}
-            onGoogleLogin={handleGoogleLogin}
             onNavigateRegister={() => setCurrentView('register')}
             onBackToCatalog={() => setCurrentView('catalog')}
           />
@@ -524,7 +516,6 @@ export default function App() {
             onRegister={handleRegister}
             onVerifyCode={handleVerifyCode}
             onResendCode={handleResendCode}
-            onGoogleLogin={handleGoogleLogin}
             onNavigateLogin={() => setCurrentView('login')}
             onBackToCatalog={() => setCurrentView('catalog')}
           />

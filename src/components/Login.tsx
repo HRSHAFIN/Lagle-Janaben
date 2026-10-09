@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import Logo from './Logo';
-import GoogleAuthButton from './GoogleAuthButton';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => Promise<string | null>;
-  onGoogleLogin: () => void;
   onNavigateRegister: () => void;
   onBackToCatalog: () => void;
 }
 
-export default function Login({ onLogin, onGoogleLogin, onNavigateRegister, onBackToCatalog }: LoginProps) {
+export default function Login({ onLogin, onNavigateRegister, onBackToCatalog }: LoginProps) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -149,14 +147,6 @@ export default function Login({ onLogin, onGoogleLogin, onNavigateRegister, onBa
               {isSubmitting ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
-
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-100" />
-            <span className="font-sans text-xs font-medium text-gray-400">or continue with</span>
-            <div className="h-px flex-1 bg-gray-100" />
-          </div>
-
-          <GoogleAuthButton label="Sign in with Google" onClick={onGoogleLogin} />
         </div>
       </div>
     </div>
