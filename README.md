@@ -2,7 +2,7 @@
 
 > Gifts that connect Hearts — A full-featured e-commerce web application for a Bangladeshi gift shop.
 
-**🔗 Live demo: [tup5n9bf.insforge.site](https://tup5n9bf.insforge.site)**
+**🔗 Live demo: [lagle-janaben.vercel.app](https://lagle-janaben.vercel.app)**
 
 ![Lagle Janaben storefront](docs/screenshots/home.png)
 
